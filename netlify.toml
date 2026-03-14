@@ -6,4 +6,4 @@
   node_bundler = "esbuild"
 
 [functions."sync-ical"]
-  schedule = "* * * * *"
+  schedule = "@hourly"

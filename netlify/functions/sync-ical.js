@@ -145,7 +145,7 @@ exports.handler = async (event) => {
 
     // 5. Cancel removed bookings
     for (const existing_b of (existing || [])) {
-      if (!incomingUids.has(existing_b.airbnb_uid) && existing_b.status === 'confirmed') {
+      if (!incomingUids.has(existing_b.airbnb_uid) && existing_b.status === 'confirmed' && !existing_b.airbnb_uid.startsWith('manual-')) {
         await supabase
           .from('bookings')
           .update({ status: 'cancelled', updated_at: new Date().toISOString() })
