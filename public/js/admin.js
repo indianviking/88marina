@@ -8,7 +8,7 @@ const SUPABASE_URL = 'https://aagirxlfyjaunqlatiuf.supabase.co';
 const SUPABASE_ANON_KEY = ['sb_publishable_jmT7z_nravZZ4Ue', 'PIExrvw_W1z4y3rL'].join('');
 const ADMIN_API = '/.netlify/functions/admin-api';
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ---- State ----
 let settings = {};
@@ -147,7 +147,7 @@ async function adminApiCall(action, data = {}) {
 // ========================================
 async function loadSettings() {
   try {
-    const { data, error } = await supabase.from('settings').select('key, value');
+    const { data, error } = await db.from('settings').select('key, value');
     if (error) throw error;
     settings = {};
     (data || []).forEach(s => { settings[s.key] = s.value; });
@@ -166,7 +166,7 @@ async function loadDashboard() {
 
   try {
     // Fetch cleanings with booking and invoice data
-    const { data: cleanings, error: cErr } = await supabase
+    const { data: cleanings, error: cErr } = await db
       .from('cleanings')
       .select('*, booking:bookings(*), invoice:invoices(*)');
     if (cErr) throw cErr;
@@ -324,7 +324,7 @@ function sendWhatsApp(encodedMessage) {
 async function loadInvoiceActions() {
   const container = document.getElementById('invoiceActions');
   try {
-    const { data: invoices, error } = await supabase
+    const { data: invoices, error } = await db
       .from('invoices')
       .select('*')
       .eq('status', 'pending');
@@ -414,13 +414,13 @@ async function renderCalendar() {
 
   let bookings = [], cleanings = [];
   try {
-    const { data: bData } = await supabase
+    const { data: bData } = await db
       .from('bookings')
       .select('*')
       .or(`checkin.lte.${rangeEnd},checkout.gte.${rangeStart}`);
     bookings = bData || [];
 
-    const { data: cData } = await supabase
+    const { data: cData } = await db
       .from('cleanings')
       .select('*, booking:bookings(*)')
       .gte('cleaning_date', rangeStart)
@@ -623,7 +623,7 @@ async function loadBookings() {
   tbody.innerHTML = '<tr><td colspan="9" class="loading-placeholder">Loading...</td></tr>';
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('cleanings')
       .select('*, booking:bookings(*), invoice:invoices(*)')
       .order('cleaning_date', { ascending: false });
@@ -662,7 +662,7 @@ async function loadBookings() {
 // ========================================
 async function loadInvoices() {
   try {
-    const { data: invoices, error } = await supabase
+    const { data: invoices, error } = await db
       .from('invoices')
       .select('*')
       .order('submitted_at', { ascending: false });
@@ -682,7 +682,7 @@ async function loadInvoices() {
     const invoiceIds = allInvoices.map(i => i.id);
     let cleaningsByInvoice = {};
     if (invoiceIds.length > 0) {
-      const { data: cleanings } = await supabase
+      const { data: cleanings } = await db
         .from('cleanings')
         .select('invoice_id, cleaning_date, rate_type')
         .in('invoice_id', invoiceIds);
@@ -738,7 +738,7 @@ let checklistData = [];
 
 async function loadChecklist() {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('checklist_items')
       .select('*')
       .eq('active', true)
@@ -872,7 +872,7 @@ async function updateWhatsAppPreview() {
   let dates = 'Mon 20 Jan, Fri 24 Jan, Mon 3 Feb';
   try {
     const today = new Date().toISOString().split('T')[0];
-    const { data } = await supabase
+    const { data } = await db
       .from('cleanings')
       .select('cleaning_date')
       .gte('cleaning_date', today)
@@ -915,7 +915,7 @@ document.getElementById('settingsForm').addEventListener('submit', async (e) => 
 async function loadSyncAudit() {
   // Sync log
   try {
-    const { data: syncLogs, error: sErr } = await supabase
+    const { data: syncLogs, error: sErr } = await db
       .from('sync_log')
       .select('*')
       .order('synced_at', { ascending: false })
@@ -952,7 +952,7 @@ async function loadSyncAudit() {
 
   // Audit log
   try {
-    const { data: auditLogs, error: aErr } = await supabase
+    const { data: auditLogs, error: aErr } = await db
       .from('audit_log')
       .select('*')
       .order('created_at', { ascending: false })

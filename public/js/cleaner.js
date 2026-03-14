@@ -6,7 +6,7 @@ const SUPABASE_ANON_KEY = ['sb_publishable_jmT7z_nravZZ4Ue', 'PIExrvw_W1z4y3rL']
 const API_BASE = '/.netlify/functions/cleaner-api';
 
 // ── Supabase Client ──
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ── State ──
 let checklistItems = [];
@@ -119,7 +119,7 @@ async function loadUpcoming() {
     const today = todayStr();
 
     // Fetch pending cleanings with date >= today
-    const { data: pendingCleans, error: err1 } = await supabase
+    const { data: pendingCleans, error: err1 } = await db
       .from('cleanings')
       .select('*, bookings!inner(checkin, checkout, nights, guest_name)')
       .eq('status', 'pending')
@@ -129,7 +129,7 @@ async function loadUpcoming() {
     if (err1) throw err1;
 
     // Fetch cancelled cleanings not yet acknowledged
-    const { data: cancelledCleans, error: err2 } = await supabase
+    const { data: cancelledCleans, error: err2 } = await db
       .from('cleanings')
       .select('*, bookings!inner(checkin, checkout, nights, guest_name)')
       .eq('status', 'cancelled')
@@ -149,7 +149,7 @@ async function loadUpcoming() {
     }
 
     // Load checklist items for checklist panels
-    const { data: items } = await supabase
+    const { data: items } = await db
       .from('checklist_items')
       .select('*')
       .eq('active', true)
@@ -428,7 +428,7 @@ async function loadHistory() {
 
     // Fetch cleanings for history:
     // cleaning_date < today OR status='complete' OR (status='cancelled' AND acknowledged)
-    const { data: allCleans, error } = await supabase
+    const { data: allCleans, error } = await db
       .from('cleanings')
       .select('*, bookings!inner(checkin, checkout, nights, guest_name), invoices(invoice_number, status)')
       .order('cleaning_date', { ascending: false });
@@ -509,7 +509,7 @@ function createHistoryRow(clean) {
 
 async function loadInvoiceBadge() {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('cleanings')
       .select('id')
       .eq('status', 'complete')
@@ -535,7 +535,7 @@ async function loadInvoice() {
   const content = document.getElementById('invoice-content');
 
   try {
-    const { data: cleans, error } = await supabase
+    const { data: cleans, error } = await db
       .from('cleanings')
       .select('*, bookings!inner(checkin, checkout, nights, guest_name)')
       .eq('status', 'complete')
@@ -704,13 +704,13 @@ async function submitInvoice() {
       const ext = invoiceFile.name.split('.').pop();
       const path = `invoices/${invoiceNumber}-${Date.now()}.${ext}`;
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { data: uploadData, error: uploadError } = await db.storage
         .from('invoice-uploads')
         .upload(path, invoiceFile, { contentType: invoiceFile.type });
 
       if (uploadError) throw uploadError;
 
-      const { data: urlData } = supabase.storage
+      const { data: urlData } = db.storage
         .from('invoice-uploads')
         .getPublicUrl(path);
 
