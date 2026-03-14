@@ -926,8 +926,10 @@ async function markInvoicePaidFromTable(invoiceId) {
 // Checklist
 // ========================================
 let checklistData = [];
+let deletedChecklistIds = []; // track removed items for save
 
 async function loadChecklist() {
+  deletedChecklistIds = [];
   try {
     const { data, error } = await db
       .from('checklist_items')
@@ -1001,8 +1003,7 @@ function renderChecklist() {
 function removeChecklistItem(idx) {
   const item = checklistData[idx];
   if (item.id) {
-    // Mark for deletion
-    item._deleted = true;
+    deletedChecklistIds.push(item.id);
   }
   checklistData.splice(idx, 1);
   renderChecklist();
@@ -1029,6 +1030,10 @@ document.getElementById('saveChecklist').addEventListener('click', async () => {
   });
 
   try {
+    // Remove deleted items first
+    for (const id of deletedChecklistIds) {
+      await adminApiCall('remove_checklist_item', { id });
+    }
     await adminApiCall('save_checklist', { items });
     showToast('Checklist saved');
     loadChecklist();
