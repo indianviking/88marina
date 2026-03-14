@@ -35,6 +35,25 @@ exports.handler = async (event) => {
     let added = 0, cancelled = 0;
     const addedBookings = [], cancelledBookings = [];
 
+    // 3b. Retroactive cleanup: remove cleanings linked to "Not available" bookings
+    // that were synced before the block filter was added
+    for (const existing_b of (existing || [])) {
+      const name = (existing_b.guest_name || '').toLowerCase();
+      if ((name.includes('not available') || name.includes('unavailable')) && existing_b.status === 'confirmed') {
+        // Remove associated cleanings
+        await supabase.from('cleanings').delete().eq('booking_id', existing_b.id);
+        // Update booking status to block or delete if 1 night
+        const ci = new Date(existing_b.checkin + 'T00:00:00');
+        const co = new Date(existing_b.checkout + 'T00:00:00');
+        const n = Math.round((co - ci) / (1000 * 60 * 60 * 24));
+        if (n >= 2) {
+          await supabase.from('bookings').update({ status: 'block', nights: n }).eq('id', existing_b.id);
+        } else {
+          await supabase.from('bookings').delete().eq('id', existing_b.id);
+        }
+      }
+    }
+
     // 4. Add new bookings
     // Airbnb iCal uses two summary types:
     //   "Reserved" = real guest booking → create clean

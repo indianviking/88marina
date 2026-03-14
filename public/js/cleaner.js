@@ -138,8 +138,12 @@ async function loadUpcoming() {
 
     if (err2) throw err2;
 
-    // Merge and sort
-    const allCleans = [...(pendingCleans || []), ...(cancelledCleans || [])];
+    // Merge, filter out "Not available" blocks, and sort
+    const merged = [...(pendingCleans || []), ...(cancelledCleans || [])];
+    const allCleans = merged.filter(c => {
+      const name = (c.bookings?.guest_name || '').toLowerCase();
+      return !name.includes('not available') && !name.includes('unavailable');
+    });
     allCleans.sort((a, b) => a.cleaning_date.localeCompare(b.cleaning_date));
 
     // Mark new items as seen

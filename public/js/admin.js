@@ -171,7 +171,17 @@ async function loadDashboard() {
       .select('*, booking:bookings(*), invoice:invoices(*)');
     if (cErr) throw cErr;
 
-    const thisYear = (cleanings || []).filter(c => c.cleaning_date >= yearStart && c.cleaning_date <= yearEnd);
+    // Filter out block bookings (Not available / host blocks) from all dashboard views
+    const realCleanings = (cleanings || []).filter(c => {
+      const b = c.booking;
+      if (!b) return true;
+      if (b.status === 'block' || b.status === 'dismissed') return false;
+      const name = (b.guest_name || '').toLowerCase();
+      if (name.includes('not available') || name.includes('unavailable')) return false;
+      return true;
+    });
+
+    const thisYear = realCleanings.filter(c => c.cleaning_date >= yearStart && c.cleaning_date <= yearEnd);
 
     // Stats
     const booked = thisYear.filter(c => c.status !== 'cancelled').length;
@@ -187,7 +197,7 @@ async function loadDashboard() {
     document.getElementById('statCancelledPct').textContent = `${cancelPct}% rate`;
 
     // Next clean hero
-    const upcoming = (cleanings || [])
+    const upcoming = realCleanings
       .filter(c => c.cleaning_date >= today && c.status === 'pending')
       .sort((a, b) => a.cleaning_date.localeCompare(b.cleaning_date));
 
@@ -245,7 +255,7 @@ async function loadDashboard() {
     }
 
     // Also show cancelled cleans that haven't been acknowledged
-    const cancelledUpcoming = (cleanings || []).filter(c =>
+    const cancelledUpcoming = realCleanings.filter(c =>
       c.status === 'cancelled' && c.cleaning_date >= today
     );
     if (cancelledUpcoming.length > 0) {
@@ -706,10 +716,14 @@ async function loadBookings() {
       .order('cleaning_date', { ascending: false });
     if (error) throw error;
 
-    // Filter out block bookings from the bookings table
+    // Filter out block bookings and "Not available" entries from the bookings table
     const filtered = (data || []).filter(c => {
       const b = c.booking;
-      return !b || b.status !== 'block';
+      if (!b) return true;
+      if (b.status === 'block' || b.status === 'dismissed') return false;
+      const name = (b.guest_name || '').toLowerCase();
+      if (name.includes('not available') || name.includes('unavailable')) return false;
+      return true;
     });
 
     if (filtered.length === 0) {
