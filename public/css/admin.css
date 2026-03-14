@@ -623,7 +623,7 @@ html, body {
   padding: 4px 0 4px 0;
   position: relative;
   background-color: #FFFFFF !important;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .cal-day:nth-child(7n) {
@@ -664,7 +664,7 @@ html, body {
 .cal-bars {
   position: relative;
   margin-top: 2px;
-  min-height: 26px;
+  min-height: 22px;
 }
 
 .cal-bar {
@@ -678,30 +678,33 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
-  left: 0;
-  right: 0;
   border-radius: 0;
+  z-index: 2;
 }
 
 /* Row slots */
 .cal-bar.row-0 { top: 0; }
 .cal-bar.row-1 { top: 22px; }
 .cal-bar.row-2 { top: 44px; }
+.cal-bar.row-3 { top: 66px; }
 
 /* Half-width positioning for checkin/checkout */
+/* Checkin day: bar occupies right half */
 .cal-bar.half-right {
   left: 50% !important;
-  right: 0 !important;
+  right: -1px !important;
 }
 
+/* Checkout day: bar occupies left half */
 .cal-bar.half-left {
-  left: 0 !important;
+  left: -1px !important;
   right: 50% !important;
 }
 
+/* Middle days: bar fills entire cell, overlaps borders for seamless look */
 .cal-bar.full-width {
-  left: 0 !important;
-  right: 0 !important;
+  left: -1px !important;
+  right: -1px !important;
 }
 
 .cal-bar-booking {

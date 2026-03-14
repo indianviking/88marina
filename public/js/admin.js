@@ -642,16 +642,16 @@ async function renderCalendar() {
           // Determine half-width class
           let posClass = 'full-width';
           if (!isSingleDay) {
-            if (isStart && isEnd) {
-              posClass = 'full-width'; // shouldn't happen for multi-day
-            } else if (isStart) {
+            if (isStart) {
               posClass = 'half-right'; // checkin day: right half
             } else if (isEnd) {
               posClass = 'half-left';  // checkout day: left half
             }
+            // middle days stay full-width
           }
 
-          // Rounded ends only at actual booking start/end, not at week boundaries
+          // Rounded ends: only at actual booking start/end
+          // NOT at week boundaries (Mon continuation or Sun wrap)
           let roundClass = '';
           if (isStart) roundClass += ' round-left';
           if (isEnd) roundClass += ' round-right';
