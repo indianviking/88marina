@@ -251,6 +251,19 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify({ success: true, results }) };
       }
 
+      // ---- Update cleaning date ----
+      case 'update_cleaning_date': {
+        const updates = { cleaning_date: body.cleaning_date };
+        if (body.rate_type) updates.rate_type = body.rate_type;
+        if (body.rate_amount !== undefined) updates.rate_amount = body.rate_amount;
+        const { error } = await supabase
+          .from('cleanings')
+          .update(updates)
+          .eq('id', body.cleaning_id);
+        if (error) throw error;
+        return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
+      }
+
       default:
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Unknown action: ' + action }) };
     }
