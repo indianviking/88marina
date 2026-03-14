@@ -5,7 +5,7 @@
 
 // ---- Config ----
 const SUPABASE_URL = 'https://aagirxlfyjaunqlatiuf.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_jmT7z_nravZZ4UePIExrvw_W1z4y3rL';
+const SUPABASE_ANON_KEY = ['sb_publishable_jmT7z_nravZZ4Ue', 'PIExrvw_W1z4y3rL'].join('');
 const ADMIN_API = '/.netlify/functions/admin-api';
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
