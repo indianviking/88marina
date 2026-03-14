@@ -199,6 +199,62 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleaned }) };
       }
 
+      // ---- Bulk add historic cleans ----
+      case 'bulk_add_cleans': {
+        // body.cleans = [{ guest_name, checkin, checkout, cleaning_date, rate_type, rate_amount, completed }]
+        const results = [];
+        for (const item of (body.cleans || [])) {
+          // Check if a booking already exists for this checkin/checkout/guest
+          let bookingId;
+          const { data: existingBooking } = await supabase
+            .from('bookings')
+            .select('id')
+            .eq('guest_name', item.guest_name)
+            .eq('checkin', item.checkin)
+            .eq('checkout', item.checkout)
+            .single();
+
+          if (existingBooking) {
+            bookingId = existingBooking.id;
+          } else {
+            const ci = new Date(item.checkin + 'T00:00:00');
+            const co = new Date(item.checkout + 'T00:00:00');
+            const nights = Math.round((co - ci) / (1000 * 60 * 60 * 24));
+            const { data: newBooking, error: bErr } = await supabase
+              .from('bookings')
+              .insert({
+                airbnb_uid: 'manual-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+                guest_name: item.guest_name,
+                checkin: item.checkin,
+                checkout: item.checkout,
+                nights,
+                status: 'confirmed'
+              })
+              .select()
+              .single();
+            if (bErr) { results.push({ error: bErr.message, item }); continue; }
+            bookingId = newBooking.id;
+          }
+
+          const { data: cleaning, error: cErr } = await supabase
+            .from('cleanings')
+            .insert({
+              booking_id: bookingId,
+              cleaning_date: item.cleaning_date,
+              rate_type: item.rate_type || 'standard',
+              rate_amount: item.rate_amount || 80,
+              status: item.completed ? 'complete' : 'pending',
+              completed_at: item.completed ? item.cleaning_date + 'T12:00:00Z' : null,
+              is_new: false
+            })
+            .select()
+            .single();
+          if (cErr) { results.push({ error: cErr.message, item }); continue; }
+          results.push({ success: true, cleaning_id: cleaning.id, guest: item.guest_name });
+        }
+        return { statusCode: 200, headers, body: JSON.stringify({ success: true, results }) };
+      }
+
       default:
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Unknown action: ' + action }) };
     }
