@@ -526,8 +526,8 @@ async function renderCalendar() {
   // Build spans for bookings
   const spans = [];
   bookings.forEach(b => {
-    // For bookings, the span covers checkin to checkout
-    // Checkin day = first night, checkout day = guest leaves (half-day)
+    // Skip dismissed blocks
+    if (b.status === 'dismissed') return;
     spans.push({
       type: b.status === 'cancelled' ? 'cancelled' : (b.status === 'block' ? 'block' : 'booking'),
       start: b.checkin,
@@ -537,6 +537,9 @@ async function renderCalendar() {
     });
   });
   cleanings.forEach(c => {
+    // Skip cleanings linked to "Not available" bookings (defensive filter)
+    const guestName = (c.booking?.guest_name || '').toLowerCase();
+    if (guestName.includes('not available') || guestName.includes('unavailable')) return;
     spans.push({
       type: 'clean',
       start: c.cleaning_date,
