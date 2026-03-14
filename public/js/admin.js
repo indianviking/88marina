@@ -496,8 +496,14 @@ async function renderCalendar() {
   }
 
   // Fetch bookings and cleanings for visible range
-  const rangeStart = gridDates[0].toISOString().split('T')[0];
-  const rangeEnd = gridDates[gridDates.length - 1].toISOString().split('T')[0];
+  const toDateStr = d => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const rangeStart = toDateStr(gridDates[0]);
+  const rangeEnd = toDateStr(gridDates[gridDates.length - 1]);
 
   let bookings = [], cleanings = [];
   try {
@@ -542,7 +548,13 @@ async function renderCalendar() {
   });
 
   // Assign rows to spans to handle overlaps
-  const dateToStr = d => d.toISOString().split('T')[0];
+  // Use local time to avoid DST/UTC offset bugs (e.g. BST shift on Mar 29)
+  const dateToStr = d => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
   const todayStr = dateToStr(new Date());
 
   // Build day map for spans
