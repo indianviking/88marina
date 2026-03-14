@@ -777,7 +777,10 @@ async function loadBookings() {
     const rows = allBookings.sort((a, b) => a.checkin.localeCompare(b.checkin));
 
     tbody.innerHTML = rows.map(b => {
-      const c = cleaningsByBooking[b.id]; // may be undefined
+      const gn = (b.guest_name || '').toLowerCase();
+      const isNotAvailable = gn.includes('not available') || gn.includes('unavailable');
+      // "Not available" bookings should never have a clean — ignore any orphaned cleaning records
+      const c = isNotAvailable ? null : cleaningsByBooking[b.id]; // may be undefined
       const inv = c?.invoice;
       const name = (b.guest_name || '').toLowerCase();
 

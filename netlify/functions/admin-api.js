@@ -171,6 +171,34 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
       }
 
+      // ---- Cleanup orphan "Not available" cleanings ----
+      case 'cleanup_blocks': {
+        const { data: blockBookings } = await supabase
+          .from('bookings')
+          .select('id, guest_name, checkin, checkout, status')
+          .eq('status', 'confirmed');
+
+        let cleaned = 0;
+        for (const b of (blockBookings || [])) {
+          const name = (b.guest_name || '').toLowerCase();
+          if (name.includes('not available') || name.includes('unavailable')) {
+            // Remove any cleanings linked to this booking
+            await supabase.from('cleanings').delete().eq('booking_id', b.id);
+            // Delete 1-night blocks, convert 2+ nights to block status
+            const ci = new Date(b.checkin + 'T00:00:00');
+            const co = new Date(b.checkout + 'T00:00:00');
+            const nights = Math.round((co - ci) / (1000 * 60 * 60 * 24));
+            if (nights >= 2) {
+              await supabase.from('bookings').update({ status: 'block', nights }).eq('id', b.id);
+            } else {
+              await supabase.from('bookings').delete().eq('id', b.id);
+            }
+            cleaned++;
+          }
+        }
+        return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleaned }) };
+      }
+
       default:
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Unknown action: ' + action }) };
     }
