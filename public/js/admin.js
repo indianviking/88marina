@@ -785,15 +785,15 @@ async function loadBookings() {
     // Sort: nearest check-in first (ascending by checkin date)
     const rows = allBookings.sort((a, b) => a.checkin.localeCompare(b.checkin));
 
-    tbody.innerHTML = rows.map(b => {
+    const today = new Date().toISOString().split('T')[0];
+
+    function renderBookingRow(b) {
       const gn = (b.guest_name || '').toLowerCase();
       const isNotAvailable = gn.includes('not available') || gn.includes('unavailable');
-      // "Not available" bookings should never have a clean — ignore any orphaned cleaning records
-      const c = isNotAvailable ? null : cleaningsByBooking[b.id]; // may be undefined
+      const c = isNotAvailable ? null : cleaningsByBooking[b.id];
       const inv = c?.invoice;
       const name = (b.guest_name || '').toLowerCase();
 
-      // Source badge
       const isBlock = name.includes('not available') || name.includes('unavailable');
       const isManual = b.airbnb_uid?.startsWith('manual-');
       const isCancelled = b.status === 'cancelled';
@@ -810,7 +810,6 @@ async function loadBookings() {
         sourceBadge = '<span class="badge badge-complete">Reserved</span>';
       }
 
-      // Clean status badge
       let cleanStatusBadge;
       if (c && c.status === 'complete') {
         cleanStatusBadge = '<span class="badge badge-complete">Complete</span>';
@@ -828,13 +827,9 @@ async function loadBookings() {
         cleanStatusBadge = '<span class="badge" style="background-color:#e8e5e0 !important; color:#999 !important;">No clean</span>';
       }
 
-      // Row opacity for dismissed/cancelled
       const rowStyle = (isDismissed || isCancelled) ? ' style="opacity:0.5;"' : (b.status === 'block' && !c) ? ' style="opacity:0.7;"' : '';
-
-      // Nights
       const nights = b.nights || '—';
 
-      // Action buttons
       let actionHtml = '';
       if (c && c.status !== 'cancelled') {
         actionHtml = `<button class="btn btn-red btn-sm" onclick="removeClean('${c.id}')">Remove</button>`;
@@ -855,7 +850,36 @@ async function loadBookings() {
         <td>${inv ? (inv.status === 'paid' ? '<span class="badge badge-complete">Paid</span>' : '<span class="badge badge-pending">Unpaid</span>') : '—'}</td>
         <td>${actionHtml}</td>
       </tr>`;
-    }).join('');
+    }
+
+    // Split into past and upcoming based on cleaning date (or checkout if no cleaning)
+    const pastRows = [];
+    const upcomingRows = [];
+    for (const b of rows) {
+      const c = cleaningsByBooking[b.id];
+      const refDate = c ? c.cleaning_date : b.checkout;
+      if (refDate < today) {
+        pastRows.push(b);
+      } else {
+        upcomingRows.push(b);
+      }
+    }
+
+    // Render upcoming first, then collapsible past section
+    let html = upcomingRows.map(renderBookingRow).join('');
+
+    if (pastRows.length > 0) {
+      html += `<tr class="past-bookings-toggle" onclick="togglePastBookings()" style="cursor:pointer;">
+        <td colspan="11" style="background-color:#f0ede8 !important; text-align:center !important; padding:10px !important; font-weight:600 !important; color:#666 !important;">
+          <span id="pastToggleIcon">&#9654;</span> Past bookings (${pastRows.length})
+        </td>
+      </tr>`;
+      html += pastRows.reverse().map(b =>
+        renderBookingRow(b).replace('<tr', '<tr class="past-booking-row" style="display:none;"')
+      ).join('');
+    }
+
+    tbody.innerHTML = html;
   } catch (err) {
     console.error('Bookings load error:', err);
     tbody.innerHTML = '<tr><td colspan="11" class="loading-placeholder">Failed to load bookings</td></tr>';
@@ -1273,6 +1297,14 @@ async function submitManualClean() {
     btn.disabled = false;
     btn.textContent = 'Add clean';
   }
+}
+
+function togglePastBookings() {
+  const rows = document.querySelectorAll('.past-booking-row');
+  const icon = document.getElementById('pastToggleIcon');
+  const visible = rows[0]?.style.display !== 'none';
+  rows.forEach(r => r.style.display = visible ? 'none' : '');
+  icon.innerHTML = visible ? '&#9654;' : '&#9660;';
 }
 
 async function removeClean(cleaningId) {
