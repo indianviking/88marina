@@ -276,6 +276,28 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify({ success: true, restored }) };
       }
 
+      // ---- Fix past manual cleanings to complete ----
+      case 'fix_past_manual_cleans': {
+        const today = new Date().toISOString().split('T')[0];
+        const { data: pastCleans } = await supabase
+          .from('cleanings')
+          .select('id, cleaning_date, booking:bookings(airbnb_uid)')
+          .eq('status', 'pending')
+          .lt('cleaning_date', today);
+
+        const fixed = [];
+        for (const c of (pastCleans || [])) {
+          if (c.booking && c.booking.airbnb_uid && c.booking.airbnb_uid.startsWith('manual-')) {
+            await supabase.from('cleanings').update({
+              status: 'complete',
+              completed_at: c.cleaning_date + 'T12:00:00Z'
+            }).eq('id', c.id);
+            fixed.push({ id: c.id, date: c.cleaning_date });
+          }
+        }
+        return { statusCode: 200, headers, body: JSON.stringify({ success: true, fixed }) };
+      }
+
       // ---- Update cleaning date ----
       case 'update_cleaning_date': {
         const updates = { cleaning_date: body.cleaning_date };
