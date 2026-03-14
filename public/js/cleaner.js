@@ -146,12 +146,6 @@ async function loadUpcoming() {
     });
     allCleans.sort((a, b) => a.cleaning_date.localeCompare(b.cleaning_date));
 
-    // Mark new items as seen
-    const newIds = allCleans.filter(c => c.is_new).map(c => c.id);
-    if (newIds.length > 0) {
-      markNewAsSeen(newIds);
-    }
-
     // Load checklist items for checklist panels
     const { data: items } = await db
       .from('checklist_items')
@@ -204,7 +198,7 @@ function createCleanCard(clean) {
 
   // Top row: date + badges
   let badgesHtml = '';
-  if (clean.is_new && !isCancelled) {
+  if (!clean.added_to_planner && !isCancelled) {
     badgesHtml += '<span class="badge badge-new">New</span>';
   }
   if (isCancelled) {
@@ -303,14 +297,27 @@ async function togglePlanner(cleaningId, btn, currentState) {
   const newState = !currentState;
   try {
     await apiCall('toggle_planner', { cleaning_id: cleaningId, added: newState });
+    const card = document.querySelector(`.clean-card[data-id="${cleaningId}"]`);
     if (newState) {
       btn.innerHTML = 'Added to planner &#10003;';
       btn.classList.add('added');
       btn.onclick = () => togglePlanner(cleaningId, btn, true);
+      // Remove "New" badge when added to planner
+      if (card) {
+        const newBadge = card.querySelector('.badge-new');
+        if (newBadge) newBadge.remove();
+      }
     } else {
       btn.innerHTML = 'Added to planner?';
       btn.classList.remove('added');
       btn.onclick = () => togglePlanner(cleaningId, btn, false);
+      // Re-add "New" badge when removed from planner
+      if (card) {
+        const badges = card.querySelector('.card-badges');
+        if (badges && !badges.querySelector('.badge-new')) {
+          badges.innerHTML = '<span class="badge badge-new">New</span>' + badges.innerHTML;
+        }
+      }
     }
   } catch (err) {
     // revert on failure
