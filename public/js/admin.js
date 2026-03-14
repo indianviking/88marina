@@ -803,8 +803,12 @@ async function loadBookings() {
 
       // Clean status badge
       let cleanStatusBadge;
-      if (c && c.status !== 'cancelled') {
-        cleanStatusBadge = '<span class="badge badge-complete">Booked</span>';
+      if (c && c.status === 'complete') {
+        cleanStatusBadge = '<span class="badge badge-complete">Complete</span>';
+      } else if (c && c.status === 'pending') {
+        cleanStatusBadge = '<span class="badge badge-pending">Pending</span>';
+      } else if (c && c.status !== 'cancelled') {
+        cleanStatusBadge = '<span class="badge badge-pending">Booked</span>';
       } else if (c && c.status === 'cancelled') {
         cleanStatusBadge = '<span class="badge badge-cancelled">Cancelled</span>';
       } else if (b.status === 'block') {
