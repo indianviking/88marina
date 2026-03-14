@@ -251,6 +251,31 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify({ success: true, results }) };
       }
 
+      // ---- Restore cancelled manual bookings ----
+      case 'restore_manual_bookings': {
+        // Find all cancelled manual bookings
+        const { data: cancelledManual } = await supabase
+          .from('bookings')
+          .select('id, airbnb_uid, guest_name, checkin, checkout')
+          .eq('status', 'cancelled')
+          .like('airbnb_uid', 'manual-%');
+
+        const restored = [];
+        for (const b of (cancelledManual || [])) {
+          const newStatus = body.statuses && body.statuses[b.id] ? body.statuses[b.id] : 'confirmed';
+          await supabase.from('bookings').update({ status: newStatus }).eq('id', b.id);
+
+          // Also restore associated cleanings
+          const cleanStatus = newStatus === 'confirmed' ? 'pending' : 'complete';
+          const cleanUpdate = { status: cleanStatus };
+          if (cleanStatus === 'complete') cleanUpdate.completed_at = cleanUpdate.completed_at || new Date().toISOString();
+          await supabase.from('cleanings').update(cleanUpdate).eq('booking_id', b.id);
+
+          restored.push({ id: b.id, guest: b.guest_name, status: newStatus });
+        }
+        return { statusCode: 200, headers, body: JSON.stringify({ success: true, restored }) };
+      }
+
       // ---- Update cleaning date ----
       case 'update_cleaning_date': {
         const updates = { cleaning_date: body.cleaning_date };
