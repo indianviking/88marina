@@ -2,6 +2,19 @@ const { createClient } = require('@supabase/supabase-js');
 const https = require('https');
 const http = require('http');
 
+// Fetch UK (England & Wales) bank holidays from GOV.UK API
+async function fetchBankHolidays() {
+  try {
+    const raw = await fetchUrl('https://www.gov.uk/bank-holidays.json');
+    const data = JSON.parse(raw);
+    const events = data['england-and-wales']?.events || [];
+    return events.map(e => e.date); // array of 'YYYY-MM-DD' strings
+  } catch (err) {
+    console.error('Failed to fetch bank holidays:', err.message);
+    return [];
+  }
+}
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
@@ -20,8 +33,11 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ message: 'No iCal URL configured' }) };
     }
 
-    // 2. Fetch and parse iCal
-    const icalText = await fetchUrl(cfg.ical_url);
+    // 2. Fetch iCal and bank holidays in parallel
+    const [icalText, bankHolidays] = await Promise.all([
+      fetchUrl(cfg.ical_url),
+      fetchBankHolidays()
+    ]);
     const events = parseICal(icalText);
 
     // 3. Get existing bookings
@@ -108,7 +124,7 @@ exports.handler = async (event) => {
         const cleanResult = calculateCleaningDate(
           new Date(event.checkout),
           allBookings || [],
-          []
+          bankHolidays
         );
 
         const rateAmount = parseInt(cfg[`rate_${cleanResult.rateType}`] || cfg.rate_standard);

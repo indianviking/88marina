@@ -505,23 +505,25 @@ async function renderCalendar() {
   const rangeStart = toDateStr(gridDates[0]);
   const rangeEnd = toDateStr(gridDates[gridDates.length - 1]);
 
-  let bookings = [], cleanings = [];
+  let bookings = [], cleanings = [], bankHolidays = [];
   try {
-    const { data: bData } = await db
-      .from('bookings')
-      .select('*')
-      .or(`checkin.lte.${rangeEnd},checkout.gte.${rangeStart}`);
-    bookings = bData || [];
-
-    const { data: cData } = await db
-      .from('cleanings')
-      .select('*, booking:bookings(*)')
-      .gte('cleaning_date', rangeStart)
-      .lte('cleaning_date', rangeEnd);
-    cleanings = cData || [];
+    const [bRes, cRes, bhRes] = await Promise.all([
+      db.from('bookings').select('*').or(`checkin.lte.${rangeEnd},checkout.gte.${rangeStart}`),
+      db.from('cleanings').select('*, booking:bookings(*)').gte('cleaning_date', rangeStart).lte('cleaning_date', rangeEnd),
+      fetch('https://www.gov.uk/bank-holidays.json').then(r => r.json()).catch(() => null)
+    ]);
+    bookings = bRes.data || [];
+    cleanings = cRes.data || [];
+    if (bhRes && bhRes['england-and-wales']) {
+      bankHolidays = bhRes['england-and-wales'].events
+        .filter(e => e.date >= rangeStart && e.date <= rangeEnd)
+        .map(e => ({ date: e.date, title: e.title }));
+    }
   } catch (err) {
     console.error('Calendar data error:', err);
   }
+  const bankHolidayMap = {};
+  bankHolidays.forEach(bh => { bankHolidayMap[bh.date] = bh.title; });
 
   // Build spans for bookings
   const spans = [];
@@ -633,9 +635,11 @@ async function renderCalendar() {
     const ds = dateToStr(d);
     const isOther = d.getMonth() !== calMonth;
     const isToday = ds === todayStr;
+    const isBankHoliday = !!bankHolidayMap[ds];
     let classes = 'cal-day';
     if (isOther) classes += ' other-month';
     if (isToday) classes += ' today';
+    if (isBankHoliday) classes += ' bank-holiday';
 
     // Build bars for this day
     const dayData = daySpans[ds] || [];
@@ -693,7 +697,8 @@ async function renderCalendar() {
     }
     barsHtml += '</div>';
 
-    html += `<div class="${classes}"><div class="cal-day-num">${d.getDate()}</div>${barsHtml}</div>`;
+    const bhLabel = isBankHoliday ? `<div class="cal-bh-label" title="${escapeHtml(bankHolidayMap[ds])}">${escapeHtml(bankHolidayMap[ds])}</div>` : '';
+    html += `<div class="${classes}"><div class="cal-day-num">${d.getDate()}${bhLabel}</div>${barsHtml}</div>`;
   });
 
   grid.innerHTML = html;
@@ -749,18 +754,22 @@ async function loadBookings() {
   tbody.innerHTML = '<tr><td colspan="11" class="loading-placeholder">Loading...</td></tr>';
 
   try {
-    // Booking-centric: get ALL bookings, then join their cleanings
-    const { data: allBookings, error: bErr } = await db
-      .from('bookings')
-      .select('*')
-      .order('checkin', { ascending: true });
+    // Booking-centric: get ALL bookings, then join their cleanings + bank holidays
+    const [bRes, cRes, bhRes] = await Promise.all([
+      db.from('bookings').select('*').order('checkin', { ascending: true }),
+      db.from('cleanings').select('*, invoice:invoices(*)'),
+      fetch('https://www.gov.uk/bank-holidays.json').then(r => r.json()).catch(() => null)
+    ]);
+    const { data: allBookings, error: bErr } = bRes;
     if (bErr) throw bErr;
-
-    // Get all cleanings with invoice info
-    const { data: allCleanings, error: cErr } = await db
-      .from('cleanings')
-      .select('*, invoice:invoices(*)');
+    const { data: allCleanings, error: cErr } = cRes;
     if (cErr) throw cErr;
+
+    // Build bank holiday set
+    const bankHolidaySet = new Set();
+    if (bhRes && bhRes['england-and-wales']) {
+      bhRes['england-and-wales'].events.forEach(e => bankHolidaySet.add(e.date));
+    }
 
     // Map cleanings by booking_id
     const cleaningsByBooking = {};
@@ -839,8 +848,8 @@ async function loadBookings() {
         <td>${nights}</td>
         <td>${sourceBadge}</td>
         <td>${cleanStatusBadge}</td>
-        <td>${c ? formatDate(c.cleaning_date) : '—'}</td>
-        <td>${c ? formatPounds(c.rate_amount) : '—'}</td>
+        <td>${c ? formatDate(c.cleaning_date) + (bankHolidaySet.has(c.cleaning_date) ? ' <span class="badge" style="background-color:#FEF3C7 !important; color:#B45309 !important; font-size:10px !important;">BH</span>' : '') : '—'}</td>
+        <td>${c ? formatPounds(c.rate_amount) + (c.rate_type === 'bank_holiday' ? ' <span class="badge" style="background-color:#FEF3C7 !important; color:#B45309 !important; font-size:10px !important;">BH rate</span>' : '') : '—'}</td>
         <td>${c?.added_to_planner ? '<span class="badge badge-planner">Yes</span>' : (c ? '<span class="badge" style="background-color:#e8e5e0 !important; color:#999 !important;">No</span>' : '—')}</td>
         <td>${c?.damage_notes ? `<span class="badge badge-pending" title="${escapeHtml(c.damage_notes)}" style="cursor:help;">Has notes</span>` : '—'}</td>
         <td>${inv ? (inv.status === 'paid' ? '<span class="badge badge-complete">Paid</span>' : '<span class="badge badge-pending">Unpaid</span>') : '—'}</td>
