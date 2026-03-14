@@ -36,7 +36,31 @@ exports.handler = async (event) => {
     const addedBookings = [], cancelledBookings = [];
 
     // 4. Add new bookings
+    // Airbnb iCal uses two summary types:
+    //   "Reserved" = real guest booking → create clean
+    //   "Not available" = Airbnb auto-block or host block → skip but flag if 2+ nights
     for (const event of events) {
+      const summaryLower = (event.summary || '').toLowerCase();
+      const isBlock = summaryLower.includes('not available') || summaryLower.includes('unavailable');
+      const checkinDate = new Date(event.checkin + 'T00:00:00');
+      const checkoutDate = new Date(event.checkout + 'T00:00:00');
+      const nights = Math.round((checkoutDate - checkinDate) / (1000 * 60 * 60 * 24));
+
+      if (!existingMap[event.uid] && isBlock) {
+        // It's a block — store it as a block record so admin can review
+        if (nights >= 2) {
+          await supabase.from('bookings').insert({
+            airbnb_uid: event.uid,
+            guest_name: event.summary || 'Not available',
+            checkin: event.checkin,
+            checkout: event.checkout,
+            status: 'block',
+            nights: nights
+          });
+        }
+        continue; // Don't create a clean for blocks
+      }
+
       if (!existingMap[event.uid]) {
         const { data: booking, error: bookingErr } = await supabase
           .from('bookings')
@@ -45,6 +69,7 @@ exports.handler = async (event) => {
             guest_name: event.summary,
             checkin: event.checkin,
             checkout: event.checkout,
+            nights: nights,
             status: 'confirmed'
           })
           .select()

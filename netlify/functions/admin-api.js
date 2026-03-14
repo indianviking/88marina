@@ -96,6 +96,81 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
       }
 
+      // ---- Manual add clean ----
+      case 'add_manual_clean': {
+        // body: { cleaning_date, rate_type, rate_amount, guest_name, checkin, checkout }
+        // Create a manual booking first
+        const { data: booking, error: bErr } = await supabase
+          .from('bookings')
+          .insert({
+            airbnb_uid: 'manual-' + Date.now(),
+            guest_name: body.guest_name || 'Manual booking',
+            checkin: body.checkin,
+            checkout: body.checkout,
+            status: 'confirmed'
+          })
+          .select()
+          .single();
+        if (bErr) throw bErr;
+
+        const { data: cleaning, error: cErr } = await supabase
+          .from('cleanings')
+          .insert({
+            booking_id: booking.id,
+            cleaning_date: body.cleaning_date,
+            rate_type: body.rate_type || 'standard',
+            rate_amount: body.rate_amount || 0,
+            status: 'pending',
+            is_new: true
+          })
+          .select()
+          .single();
+        if (cErr) throw cErr;
+
+        await supabase.from('audit_log').insert({
+          action: 'manual_clean_added',
+          cleaning_id: cleaning.id,
+          detail: `Manual clean added for ${body.cleaning_date}`
+        });
+
+        return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleaning }) };
+      }
+
+      // ---- Remove clean ----
+      case 'remove_clean': {
+        // body: { cleaning_id }
+        const { data: cleanData } = await supabase
+          .from('cleanings')
+          .select('booking_id')
+          .eq('id', body.cleaning_id)
+          .single();
+
+        await supabase
+          .from('cleanings')
+          .delete()
+          .eq('id', body.cleaning_id);
+
+        // Also remove the booking if it was manual
+        if (cleanData && cleanData.booking_id) {
+          const { data: bookingData } = await supabase
+            .from('bookings')
+            .select('airbnb_uid')
+            .eq('id', cleanData.booking_id)
+            .single();
+
+          if (bookingData && bookingData.airbnb_uid && bookingData.airbnb_uid.startsWith('manual-')) {
+            await supabase.from('bookings').delete().eq('id', cleanData.booking_id);
+          }
+        }
+
+        await supabase.from('audit_log').insert({
+          action: 'clean_removed',
+          detail: `Clean ${body.cleaning_id} removed`
+        });
+
+        return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
+      }
+
       default:
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Unknown action: ' + action }) };
     }

@@ -83,6 +83,9 @@
         <div class="hero-loading">Loading next clean...</div>
       </div>
 
+      <!-- Airbnb block flags -->
+      <div id="blockFlags"></div>
+
       <!-- Upcoming cleans -->
       <div class="card">
         <h3 class="card-title">Upcoming cleans</h3>
@@ -125,7 +128,10 @@
 
     <!-- Bookings Page -->
     <section class="page" id="page-bookings">
-      <h2 class="page-title">Bookings</h2>
+      <div class="page-header-row">
+        <h2 class="page-title">Bookings</h2>
+        <button class="btn btn-green" onclick="showAddCleanModal()">+ Add clean</button>
+      </div>
       <div class="card table-card">
         <div class="table-wrapper">
           <table class="data-table" id="bookingsTable">
@@ -140,10 +146,11 @@
                 <th>Invoice no.</th>
                 <th>Invoice paid</th>
                 <th>Cancel ack'd</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody id="bookingsBody">
-              <tr><td colspan="9" class="loading-placeholder">Loading...</td></tr>
+              <tr><td colspan="10" class="loading-placeholder">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -310,6 +317,47 @@
       </div>
     </section>
   </main>
+
+  <!-- Add Clean Modal -->
+  <div class="modal-overlay" id="addCleanOverlay">
+    <div class="modal" id="addCleanModal">
+      <button class="modal-close" onclick="closeAddCleanModal()">&times;</button>
+      <h3 class="modal-title">Add manual clean</h3>
+      <div class="form-field">
+        <label for="manualGuestName">Guest / booking name</label>
+        <input type="text" id="manualGuestName" placeholder="e.g. John Smith">
+      </div>
+      <div class="form-grid">
+        <div class="form-field">
+          <label for="manualCheckin">Check-in date</label>
+          <input type="date" id="manualCheckin">
+        </div>
+        <div class="form-field">
+          <label for="manualCheckout">Check-out date</label>
+          <input type="date" id="manualCheckout">
+        </div>
+      </div>
+      <div class="form-field">
+        <label for="manualCleanDate">Cleaning date</label>
+        <input type="date" id="manualCleanDate">
+      </div>
+      <div class="form-grid">
+        <div class="form-field">
+          <label for="manualRateType">Rate type</label>
+          <select id="manualRateType">
+            <option value="standard">Standard</option>
+            <option value="weekend">Weekend</option>
+            <option value="bank_holiday">Bank Holiday</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="manualRateAmount">Rate amount (£)</label>
+          <input type="number" id="manualRateAmount" placeholder="0" min="0">
+        </div>
+      </div>
+      <button class="btn btn-green btn-lg" onclick="submitManualClean()" id="submitManualCleanBtn" style="width:100%;margin-top:16px !important;">Add clean</button>
+    </div>
+  </div>
 
   <script src="js/admin.js"></script>
 </body>

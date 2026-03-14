@@ -265,6 +265,9 @@ async function loadDashboard() {
       });
     }
 
+    // Airbnb blocks flagged for review
+    await loadBlockFlags();
+
     // WhatsApp card
     await loadWhatsAppCard(upcoming);
 
@@ -274,6 +277,80 @@ async function loadDashboard() {
   } catch (err) {
     console.error('Dashboard load error:', err);
     showToast('Failed to load dashboard', 'error');
+  }
+}
+
+async function loadBlockFlags() {
+  const container = document.getElementById('blockFlags');
+  if (!container) return;
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const { data: blocks, error } = await db
+      .from('bookings')
+      .select('*')
+      .eq('status', 'block')
+      .gte('checkout', today)
+      .order('checkin', { ascending: true });
+    if (error) throw error;
+
+    if (!blocks || blocks.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+
+    container.innerHTML = '<h3 class="card-title" style="margin-bottom:12px !important;">Blocked dates to review</h3>' +
+      blocks.map(b => `
+        <div class="block-flag" id="block-${b.id}">
+          <div class="block-flag-info">
+            <div class="block-flag-title">${formatDateShort(b.checkin)} → ${formatDateShort(b.checkout)} (${b.nights || '?'} nights)</div>
+            <div class="block-flag-sub">${escapeHtml(b.guest_name)} — Does this need a clean?</div>
+          </div>
+          <div class="block-flag-actions">
+            <button class="btn btn-green btn-sm" onclick="convertBlockToClean('${b.id}')">Book clean</button>
+            <button class="btn btn-dark btn-sm" onclick="dismissBlock('${b.id}')">Dismiss</button>
+          </div>
+        </div>
+      `).join('');
+  } catch (err) {
+    console.error('Block flags error:', err);
+  }
+}
+
+async function convertBlockToClean(bookingId) {
+  try {
+    // Get the block booking details
+    const { data: booking } = await db.from('bookings').select('*').eq('id', bookingId).single();
+    if (!booking) return;
+
+    // Convert to confirmed and add clean
+    await adminApiCall('add_manual_clean', {
+      guest_name: 'Block clean',
+      checkin: booking.checkin,
+      checkout: booking.checkout,
+      cleaning_date: booking.checkout,
+      rate_type: 'standard',
+      rate_amount: parseInt(settings.rate_standard) || 0
+    });
+
+    // Remove the block booking
+    await db.from('bookings').delete().eq('id', bookingId);
+
+    showToast('Clean booked for blocked dates');
+    const el = document.getElementById('block-' + bookingId);
+    if (el) el.remove();
+  } catch (err) {
+    showToast('Failed to convert block', 'error');
+  }
+}
+
+async function dismissBlock(bookingId) {
+  try {
+    await db.from('bookings').update({ status: 'dismissed' }).eq('id', bookingId);
+    showToast('Block dismissed');
+    const el = document.getElementById('block-' + bookingId);
+    if (el) el.remove();
+  } catch (err) {
+    showToast('Failed to dismiss block', 'error');
   }
 }
 
@@ -620,7 +697,7 @@ function closeCalPopup() {
 // ========================================
 async function loadBookings() {
   const tbody = document.getElementById('bookingsBody');
-  tbody.innerHTML = '<tr><td colspan="9" class="loading-placeholder">Loading...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="10" class="loading-placeholder">Loading...</td></tr>';
 
   try {
     const { data, error } = await db
@@ -629,12 +706,18 @@ async function loadBookings() {
       .order('cleaning_date', { ascending: false });
     if (error) throw error;
 
-    if (!data || data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No bookings found</td></tr>';
+    // Filter out block bookings from the bookings table
+    const filtered = (data || []).filter(c => {
+      const b = c.booking;
+      return !b || b.status !== 'block';
+    });
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No bookings found</td></tr>';
       return;
     }
 
-    tbody.innerHTML = data.map(c => {
+    tbody.innerHTML = filtered.map(c => {
       const b = c.booking;
       const inv = c.invoice;
       const isCancelled = c.status === 'cancelled';
@@ -649,11 +732,12 @@ async function loadBookings() {
         <td>${inv ? inv.invoice_number : '—'}</td>
         <td>${inv ? (inv.status === 'paid' ? '<span class="badge badge-complete">Paid</span>' : '<span class="badge badge-pending">Pending</span>') : '—'}</td>
         <td>${isCancelled ? (c.cancellation_acknowledged ? '<span class="badge badge-complete">Yes</span>' : '<span class="badge badge-pending">Pending</span>') : '—'}</td>
+        <td><button class="btn btn-red btn-sm" onclick="removeClean('${c.id}')">Remove</button></td>
       </tr>`;
     }).join('');
   } catch (err) {
     console.error('Bookings load error:', err);
-    tbody.innerHTML = '<tr><td colspan="9" class="loading-placeholder">Failed to load bookings</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="loading-placeholder">Failed to load bookings</td></tr>';
   }
 }
 
@@ -1003,6 +1087,78 @@ async function loadSyncAudit() {
       btn.textContent = 'Sync now';
     }
   };
+}
+
+// ========================================
+// Manual Add / Remove Clean
+// ========================================
+function showAddCleanModal() {
+  document.getElementById('addCleanOverlay').classList.add('visible');
+  // Pre-fill rate from settings
+  const rateType = document.getElementById('manualRateType');
+  rateType.value = 'standard';
+  document.getElementById('manualRateAmount').value = settings.rate_standard || '';
+  rateType.onchange = () => {
+    const key = 'rate_' + rateType.value;
+    document.getElementById('manualRateAmount').value = settings[key] || '';
+  };
+  // Auto-set clean date when checkout changes
+  document.getElementById('manualCheckout').onchange = () => {
+    document.getElementById('manualCleanDate').value = document.getElementById('manualCheckout').value;
+  };
+}
+
+function closeAddCleanModal() {
+  document.getElementById('addCleanOverlay').classList.remove('visible');
+}
+
+async function submitManualClean() {
+  const guestName = document.getElementById('manualGuestName').value.trim();
+  const checkin = document.getElementById('manualCheckin').value;
+  const checkout = document.getElementById('manualCheckout').value;
+  const cleanDate = document.getElementById('manualCleanDate').value;
+  const rateType = document.getElementById('manualRateType').value;
+  const rateAmount = document.getElementById('manualRateAmount').value;
+  const btn = document.getElementById('submitManualCleanBtn');
+
+  if (!checkin || !checkout || !cleanDate) {
+    showToast('Please fill in all date fields', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Adding...';
+
+  try {
+    await adminApiCall('add_manual_clean', {
+      guest_name: guestName || 'Manual booking',
+      checkin,
+      checkout,
+      cleaning_date: cleanDate,
+      rate_type: rateType,
+      rate_amount: parseInt(rateAmount) || 0
+    });
+    showToast('Clean added successfully');
+    closeAddCleanModal();
+    loadBookings();
+  } catch (err) {
+    // toast shown by adminApiCall
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Add clean';
+  }
+}
+
+async function removeClean(cleaningId) {
+  if (!confirm('Remove this clean? This cannot be undone.')) return;
+
+  try {
+    await adminApiCall('remove_clean', { cleaning_id: cleaningId });
+    showToast('Clean removed');
+    loadBookings();
+  } catch (err) {
+    // toast shown
+  }
 }
 
 // ========================================

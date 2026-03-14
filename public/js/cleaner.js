@@ -206,9 +206,7 @@ function createCleanCard(clean) {
   if (isCancelled) {
     badgesHtml += '<span class="badge badge-cancelled">Cancelled</span>';
   }
-  if (clean.rate_type !== 'standard') {
-    badgesHtml += `<span class="badge badge-rate">${formatRate(clean.rate_type)}</span>`;
-  }
+  // Rate badge removed — cleaner should not see rates
 
   // Details
   const checkinFormatted = formatDate(booking.checkin);
@@ -224,10 +222,9 @@ function createCleanCard(clean) {
   } else {
     const plannerText = clean.added_to_planner ? 'Added to planner &#10003;' : 'Added to planner?';
     const plannerClass = clean.added_to_planner ? 'btn btn-planner added' : 'btn btn-planner';
-    const plannerDisabled = clean.added_to_planner ? 'disabled' : '';
 
     actionsHtml = `
-      <button class="${plannerClass}" ${plannerDisabled} onclick="togglePlanner('${clean.id}', this)">
+      <button class="${plannerClass}" onclick="togglePlanner('${clean.id}', this, ${clean.added_to_planner ? 'true' : 'false'})">
         ${plannerText}
       </button>
       <button class="btn btn-complete" onclick="markComplete('${clean.id}', this)">
@@ -247,7 +244,7 @@ function createCleanCard(clean) {
       <span>${checkinFormatted}</span> &rarr; <span>${checkoutFormatted}</span>
       &nbsp;&middot;&nbsp; ${booking.nights} night${booking.nights !== 1 ? 's' : ''}
     </div>
-    <div class="card-rate">&pound;${clean.rate_amount} &middot; ${formatRate(clean.rate_type)} rate</div>
+    <!-- Rate hidden from cleaner view -->
     <div class="card-actions">${actionsHtml}</div>
     <div class="checklist-panel" id="checklist-${clean.id}">
       ${renderChecklistPanel(clean)}
@@ -297,15 +294,24 @@ async function markNewAsSeen(ids) {
   }
 }
 
-async function togglePlanner(cleaningId, btn) {
+async function togglePlanner(cleaningId, btn, currentState) {
   btn.disabled = true;
+  const newState = !currentState;
   try {
-    await apiCall('toggle_planner', { cleaning_id: cleaningId });
-    btn.innerHTML = 'Added to planner &#10003;';
-    btn.classList.add('added');
+    await apiCall('toggle_planner', { cleaning_id: cleaningId, added: newState });
+    if (newState) {
+      btn.innerHTML = 'Added to planner &#10003;';
+      btn.classList.add('added');
+      btn.onclick = () => togglePlanner(cleaningId, btn, true);
+    } else {
+      btn.innerHTML = 'Added to planner?';
+      btn.classList.remove('added');
+      btn.onclick = () => togglePlanner(cleaningId, btn, false);
+    }
   } catch (err) {
-    btn.disabled = false;
+    // revert on failure
   }
+  btn.disabled = false;
 }
 
 async function markComplete(cleaningId, btn) {
@@ -493,7 +499,7 @@ function createHistoryRow(clean) {
   row.innerHTML = `
     <div class="history-left">
       <div class="history-date">${formatDate(clean.cleaning_date)}</div>
-      <div class="history-nights">${booking.nights} night${booking.nights !== 1 ? 's' : ''} &middot; &pound;${clean.rate_amount}</div>
+      <div class="history-nights">${booking.nights} night${booking.nights !== 1 ? 's' : ''}</div>
     </div>
     <div class="history-right">
       ${statusBadge}
@@ -580,14 +586,12 @@ function renderInvoiceContent() {
         <div class="invoice-select-info">
           <div>
             <div class="invoice-select-date">${formatDate(clean.cleaning_date)}</div>
-            <div class="invoice-select-details">${booking.nights} night${booking.nights !== 1 ? 's' : ''} &middot; ${formatRate(clean.rate_type)}</div>
+            <div class="invoice-select-details">${booking.nights} night${booking.nights !== 1 ? 's' : ''}</div>
           </div>
-          <div class="invoice-select-amount">&pound;${clean.rate_amount}</div>
         </div>
       </div>`;
   }).join('');
 
-  const total = calculateSelectedTotal();
   const selectedCount = selectedCleanIds.size;
 
   content.innerHTML = `
@@ -600,10 +604,6 @@ function renderInvoiceContent() {
         </button>
       </div>
       ${selectRowsHtml}
-      <div class="invoice-total-bar">
-        <span>Total</span>
-        <span>&pound;${total}</span>
-      </div>
     </div>
 
     <div class="invoice-section" id="invoice-form-section" style="${selectedCount === 0 ? 'opacity:0.5;pointer-events:none;' : ''}">
@@ -612,10 +612,6 @@ function renderInvoiceContent() {
         <div class="form-group">
           <label>Invoice number</label>
           <input type="text" id="invoice-number" placeholder="e.g. INV-001">
-        </div>
-        <div class="form-group">
-          <label>Total amount (&pound;)</label>
-          <input type="number" id="invoice-amount" placeholder="0" value="${total}" step="0.01" min="0">
         </div>
         <div class="form-group">
           <label>Upload invoice (PDF, JPG, PNG)</label>
@@ -675,7 +671,6 @@ function handleFileSelect(input) {
 
 async function submitInvoice() {
   const invoiceNumber = document.getElementById('invoice-number').value.trim();
-  const invoiceAmount = document.getElementById('invoice-amount').value;
   const btn = document.getElementById('submit-invoice-btn');
 
   // Validation
@@ -685,10 +680,6 @@ async function submitInvoice() {
   }
   if (!invoiceNumber) {
     showError('Please enter an invoice number');
-    return;
-  }
-  if (!invoiceAmount || parseFloat(invoiceAmount) <= 0) {
-    showError('Please enter a valid amount');
     return;
   }
 
@@ -721,7 +712,6 @@ async function submitInvoice() {
     // Submit via API
     await apiCall('submit_invoice', {
       invoice_number: invoiceNumber,
-      amount_pence: Math.round(parseFloat(invoiceAmount) * 100),
       file_url: fileUrl,
       file_name: fileName,
       cleaning_ids: Array.from(selectedCleanIds)
@@ -738,7 +728,7 @@ async function submitInvoice() {
         <div class="check-icon">&#10003;</div>
         <p>Invoice ${escapeHtml(invoiceNumber)} submitted successfully</p>
         <p style="font-size:13px;font-weight:400;color:#777772 !important;margin-top:8px;">
-          ${selectedCleanIds.size} clean${selectedCleanIds.size !== 1 ? 's' : ''} linked &middot; &pound;${invoiceAmount}
+          ${selectedCleanIds.size} clean${selectedCleanIds.size !== 1 ? 's' : ''} linked
         </p>
       </div>`;
 

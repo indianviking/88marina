@@ -37,17 +37,21 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
       }
 
-      // Add to planner
+      // Toggle planner status
       case 'toggle_planner': {
+        const added = body.added !== undefined ? body.added : true;
         await supabase
           .from('cleanings')
-          .update({ added_to_planner: true, planner_added_at: new Date().toISOString() })
+          .update({
+            added_to_planner: added,
+            planner_added_at: added ? new Date().toISOString() : null
+          })
           .eq('id', body.cleaning_id);
 
         await supabase.from('audit_log').insert({
-          action: 'added_to_planner',
+          action: added ? 'added_to_planner' : 'removed_from_planner',
           cleaning_id: body.cleaning_id,
-          detail: 'Cleaner added to planner'
+          detail: added ? 'Cleaner added to planner' : 'Cleaner removed from planner'
         });
         return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
       }
@@ -106,7 +110,7 @@ exports.handler = async (event) => {
           .from('invoices')
           .insert({
             invoice_number: body.invoice_number,
-            amount_pence: body.amount_pence,
+            amount_pence: body.amount_pence || 0,
             file_url: body.file_url || null,
             file_name: body.file_name || null
           })
@@ -126,7 +130,7 @@ exports.handler = async (event) => {
         await supabase.from('audit_log').insert({
           action: 'invoice_submitted',
           invoice_id: invoice.id,
-          detail: `Invoice ${body.invoice_number} submitted for £${(body.amount_pence / 100).toFixed(2)}`
+          detail: `Invoice ${body.invoice_number} submitted`
         });
 
         // Send email notification to owner
@@ -144,7 +148,7 @@ exports.handler = async (event) => {
               from: 'noreply@yourdomain.com',
               to: cfg.cleaner_email || 'owner@example.com',
               subject: '88 Marina — Invoice submitted',
-              text: `Invoice ${body.invoice_number} has been submitted for £${(body.amount_pence / 100).toFixed(2)}.`
+              text: `Invoice ${body.invoice_number} has been submitted.`
             })
           });
         } catch (e) {
