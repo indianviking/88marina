@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>88 Marina — Admin</title>
+  <link rel="stylesheet" href="css/admin.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h1 class="sidebar-logo">88 Marina</h1>
+      <span class="sidebar-sub">Admin</span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-page="dashboard">
+        <span class="nav-icon">📊</span> Dashboard
+      </a>
+      <a href="#" class="nav-item" data-page="calendar">
+        <span class="nav-icon">📅</span> Calendar
+      </a>
+      <a href="#" class="nav-item" data-page="bookings">
+        <span class="nav-icon">📋</span> Bookings
+      </a>
+      <a href="#" class="nav-item" data-page="invoices">
+        <span class="nav-icon">💷</span> Invoices
+      </a>
+      <a href="#" class="nav-item" data-page="checklist">
+        <span class="nav-icon">✅</span> Checklist
+      </a>
+      <a href="#" class="nav-item" data-page="settings">
+        <span class="nav-icon">⚙️</span> Settings
+      </a>
+      <a href="#" class="nav-item" data-page="sync">
+        <span class="nav-icon">🔄</span> Sync &amp; Audit
+      </a>
+    </nav>
+  </aside>
+
+  <!-- Mobile header -->
+  <header class="mobile-header">
+    <button class="hamburger" id="hamburger" aria-label="Toggle menu">☰</button>
+    <h1 class="mobile-title">88 Marina</h1>
+  </header>
+
+  <!-- Overlay for mobile sidebar -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <!-- Main content -->
+  <main class="main-content" id="mainContent">
+    <!-- Dashboard Page -->
+    <section class="page active" id="page-dashboard">
+      <h2 class="page-title">Dashboard</h2>
+
+      <!-- Stats row -->
+      <div class="stats-row" id="dashboardStats">
+        <div class="stat-card">
+          <div class="stat-label">Cleans booked</div>
+          <div class="stat-value" id="statBooked">—</div>
+          <div class="stat-sub">This year</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Cleans completed</div>
+          <div class="stat-value" id="statCompleted">—</div>
+          <div class="stat-sub">This year</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total cost</div>
+          <div class="stat-value" id="statCost">—</div>
+          <div class="stat-sub">This year</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Cancellations</div>
+          <div class="stat-value" id="statCancelled">—</div>
+          <div class="stat-sub" id="statCancelledPct"></div>
+        </div>
+      </div>
+
+      <!-- Next clean hero -->
+      <div class="hero-card" id="nextCleanHero">
+        <div class="hero-loading">Loading next clean...</div>
+      </div>
+
+      <!-- Upcoming cleans -->
+      <div class="card">
+        <h3 class="card-title">Upcoming cleans</h3>
+        <div id="upcomingCleansList" class="upcoming-list">
+          <div class="loading-placeholder">Loading...</div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="actions-row" id="actionsRow">
+        <!-- WhatsApp card -->
+        <div class="action-card whatsapp-card" id="whatsappCard">
+          <h3 class="card-title">WhatsApp update</h3>
+          <div id="whatsappContent">
+            <div class="loading-placeholder">Loading...</div>
+          </div>
+        </div>
+        <!-- Invoice action cards inserted here -->
+        <div id="invoiceActions"></div>
+      </div>
+    </section>
+
+    <!-- Calendar Page -->
+    <section class="page" id="page-calendar">
+      <h2 class="page-title">Calendar</h2>
+      <div class="calendar-controls">
+        <button class="btn btn-outline" id="calPrev">&larr; Prev</button>
+        <h3 class="calendar-month" id="calMonthLabel"></h3>
+        <button class="btn btn-outline" id="calNext">Next &rarr;</button>
+      </div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+      <!-- Popup -->
+      <div class="cal-popup-overlay" id="calPopupOverlay">
+        <div class="cal-popup" id="calPopup">
+          <button class="cal-popup-close" id="calPopupClose">&times;</button>
+          <div id="calPopupContent"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bookings Page -->
+    <section class="page" id="page-bookings">
+      <h2 class="page-title">Bookings</h2>
+      <div class="card table-card">
+        <div class="table-wrapper">
+          <table class="data-table" id="bookingsTable">
+            <thead>
+              <tr>
+                <th>Cleaning date</th>
+                <th>Check-in</th>
+                <th>Check-out</th>
+                <th>Rate</th>
+                <th>Status</th>
+                <th>In planner</th>
+                <th>Invoice no.</th>
+                <th>Invoice paid</th>
+                <th>Cancel ack'd</th>
+              </tr>
+            </thead>
+            <tbody id="bookingsBody">
+              <tr><td colspan="9" class="loading-placeholder">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Invoices Page -->
+    <section class="page" id="page-invoices">
+      <h2 class="page-title">Invoices</h2>
+      <div class="stats-row" id="invoiceStats">
+        <div class="stat-card">
+          <div class="stat-label">Total invoiced</div>
+          <div class="stat-value" id="statInvoiced">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total paid</div>
+          <div class="stat-value" id="statPaid">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Outstanding</div>
+          <div class="stat-value" id="statOutstanding">—</div>
+        </div>
+      </div>
+      <div class="card table-card">
+        <div class="table-wrapper">
+          <table class="data-table" id="invoicesTable">
+            <thead>
+              <tr>
+                <th>Invoice no.</th>
+                <th>Cleaning dates</th>
+                <th>Rate type</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="invoicesBody">
+              <tr><td colspan="6" class="loading-placeholder">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Checklist Page -->
+    <section class="page" id="page-checklist">
+      <h2 class="page-title">Checklist editor</h2>
+      <div class="card">
+        <p class="card-desc">Drag to reorder. Changes apply to all future cleans.</p>
+        <div id="checklistItems" class="checklist-editor"></div>
+        <div class="checklist-actions">
+          <button class="btn btn-green" id="addChecklistItem">+ Add item</button>
+          <button class="btn btn-dark" id="saveChecklist">Save changes</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Settings Page -->
+    <section class="page" id="page-settings">
+      <h2 class="page-title">Settings</h2>
+      <form id="settingsForm" class="settings-form">
+        <!-- Property & Cleaner -->
+        <div class="card settings-group">
+          <h3 class="card-title">Property &amp; cleaner</h3>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="setting_property_name">Property name</label>
+              <input type="text" id="setting_property_name" data-key="property_name">
+            </div>
+            <div class="form-field">
+              <label for="setting_property_address">Property address</label>
+              <input type="text" id="setting_property_address" data-key="property_address">
+            </div>
+            <div class="form-field">
+              <label for="setting_cleaner_name">Cleaner name</label>
+              <input type="text" id="setting_cleaner_name" data-key="cleaner_name">
+            </div>
+            <div class="form-field">
+              <label for="setting_cleaner_email">Cleaner email</label>
+              <input type="email" id="setting_cleaner_email" data-key="cleaner_email">
+            </div>
+            <div class="form-field">
+              <label for="setting_min_notice_hours">Min notice (hours)</label>
+              <input type="number" id="setting_min_notice_hours" data-key="min_notice_hours">
+            </div>
+            <div class="form-field form-field-wide">
+              <label for="setting_ical_url">Airbnb iCal URL</label>
+              <input type="url" id="setting_ical_url" data-key="ical_url" placeholder="https://www.airbnb.co.uk/calendar/ical/...">
+            </div>
+          </div>
+        </div>
+
+        <!-- Rates -->
+        <div class="card settings-group">
+          <h3 class="card-title">Cleaning rates</h3>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="setting_rate_standard">Standard rate (£)</label>
+              <input type="number" id="setting_rate_standard" data-key="rate_standard">
+            </div>
+            <div class="form-field">
+              <label for="setting_rate_weekend">Weekend rate (£)</label>
+              <input type="number" id="setting_rate_weekend" data-key="rate_weekend">
+            </div>
+            <div class="form-field">
+              <label for="setting_rate_bank_holiday">Bank holiday rate (£)</label>
+              <input type="number" id="setting_rate_bank_holiday" data-key="rate_bank_holiday">
+            </div>
+          </div>
+        </div>
+
+        <!-- WhatsApp template -->
+        <div class="card settings-group">
+          <h3 class="card-title">WhatsApp message template</h3>
+          <div class="form-field form-field-wide">
+            <label for="setting_whatsapp_template">Template</label>
+            <textarea id="setting_whatsapp_template" data-key="whatsapp_template" rows="4"></textarea>
+            <p class="field-hint">Available placeholders: {property}, {dates}</p>
+          </div>
+          <div class="form-field form-field-wide">
+            <label>Live preview</label>
+            <div class="template-preview" id="whatsappPreview"></div>
+          </div>
+        </div>
+
+        <!-- Email templates -->
+        <div class="card settings-group">
+          <h3 class="card-title">Email templates</h3>
+          <div class="form-field form-field-wide">
+            <label for="setting_email_template_new">New booking email</label>
+            <textarea id="setting_email_template_new" data-key="email_template_new" rows="3"></textarea>
+            <p class="field-hint">Placeholders: {cleaner_name}, {property}, {date}</p>
+          </div>
+          <div class="form-field form-field-wide">
+            <label for="setting_email_template_cancel">Cancellation email</label>
+            <textarea id="setting_email_template_cancel" data-key="email_template_cancel" rows="3"></textarea>
+            <p class="field-hint">Placeholders: {cleaner_name}, {property}, {date}</p>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-green btn-lg">Save all settings</button>
+      </form>
+    </section>
+
+    <!-- Sync & Audit Page -->
+    <section class="page" id="page-sync">
+      <h2 class="page-title">Sync &amp; Audit</h2>
+
+      <div class="card">
+        <div class="card-header-row">
+          <h3 class="card-title">iCal sync log</h3>
+          <button class="btn btn-blue" id="syncNowBtn">Sync now</button>
+        </div>
+        <div id="syncLogList" class="log-list">
+          <div class="loading-placeholder">Loading...</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 24px !important;">
+        <h3 class="card-title">Cleaner audit log</h3>
+        <div id="auditLogList" class="log-list">
+          <div class="loading-placeholder">Loading...</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/admin.js"></script>
+</body>
+</html>
