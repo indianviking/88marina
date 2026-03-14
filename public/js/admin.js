@@ -520,8 +520,10 @@ async function renderCalendar() {
   // Build spans for bookings
   const spans = [];
   bookings.forEach(b => {
+    // For bookings, the span covers checkin to checkout
+    // Checkin day = first night, checkout day = guest leaves (half-day)
     spans.push({
-      type: b.status === 'cancelled' ? 'cancelled' : 'booking',
+      type: b.status === 'cancelled' ? 'cancelled' : (b.status === 'block' ? 'block' : 'booking'),
       start: b.checkin,
       end: b.checkout,
       label: b.guest_name || 'Guest',
@@ -547,20 +549,47 @@ async function renderCalendar() {
   const daySpans = {}; // dateStr -> [{span, row}]
   gridDates.forEach(d => { daySpans[dateToStr(d)] = []; });
 
+  // For row allocation, we need to consider that checkout day only uses left half
+  // and checkin day only uses right half, so they don't conflict on same day
   spans.forEach(span => {
     const s = new Date(span.start + 'T00:00:00');
     const e = new Date(span.end + 'T00:00:00');
     // Find the first row that doesn't conflict
     let row = 0;
     let placed = false;
-    while (!placed && row < 3) {
+    while (!placed && row < 4) {
       let conflict = false;
       const cur = new Date(s);
       while (cur <= e) {
         const key = dateToStr(cur);
         if (daySpans[key]) {
-          const existing = daySpans[key].find(x => x.row === row);
-          if (existing) { conflict = true; break; }
+          for (const existing of daySpans[key]) {
+            if (existing.row !== row) continue;
+            // Check if they actually conflict considering half-widths
+            const curIsStart = key === span.start;
+            const curIsEnd = key === span.end;
+            const exIsStart = key === existing.span.start;
+            const exIsEnd = key === existing.span.end;
+            // checkin (start) uses right half, checkout (end) uses left half
+            // A checkout (left half) + checkin (right half) on same day don't conflict
+            const spanUsesLeft = !curIsStart || (curIsStart && curIsEnd);
+            const spanUsesRight = !curIsEnd || (curIsStart && curIsEnd);
+            const exUsesLeft = !exIsStart || (exIsStart && exIsEnd);
+            const exUsesRight = !exIsEnd || (exIsStart && exIsEnd);
+            // For single-day spans (clean), they use full width
+            const spanSingleDay = span.start === span.end;
+            const exSingleDay = existing.span.start === existing.span.end;
+            if (spanSingleDay || exSingleDay) {
+              conflict = true;
+              break;
+            }
+            // Checkout (end only) uses left, checkin (start only) uses right
+            if (curIsEnd && !curIsStart && exIsStart && !exIsEnd) continue; // no conflict
+            if (curIsStart && !curIsEnd && exIsEnd && !exIsStart) continue; // no conflict
+            conflict = true;
+            break;
+          }
+          if (conflict) break;
         }
         cur.setDate(cur.getDate() + 1);
       }
@@ -596,60 +625,55 @@ async function renderCalendar() {
     // Build bars for this day
     const dayData = daySpans[ds] || [];
     const maxRow = dayData.length > 0 ? Math.max(...dayData.map(x => x.row)) : -1;
+    // Set min-height based on number of rows
+    const barsHeight = maxRow >= 0 ? ((maxRow + 1) * 22 + 2) : 0;
 
-    let barsHtml = '<div class="cal-bars">';
-    for (let r = 0; r <= Math.min(maxRow, 2); r++) {
-      const entry = dayData.find(x => x.row === r);
-      if (entry) {
-        const span = entry.span;
-        const spanStart = new Date(span.start + 'T00:00:00');
-        const spanEnd = new Date(span.end + 'T00:00:00');
-        const isStart = ds === span.start;
-        const isEnd = ds === span.end;
-        // Check week boundaries
-        const dayOfWeek = d.getDay();
-        const isMonday = dayOfWeek === 1;
-        const isSunday = dayOfWeek === 0;
+    let barsHtml = `<div class="cal-bars" style="min-height:${Math.max(barsHeight, 22)}px">`;
+    for (let r = 0; r <= Math.min(maxRow, 3); r++) {
+      // There may be multiple entries at the same row on the same day (checkout + checkin)
+      const entries = dayData.filter(x => x.row === r);
+      if (entries.length > 0) {
+        for (const entry of entries) {
+          const span = entry.span;
+          const isStart = ds === span.start;
+          const isEnd = ds === span.end;
+          const isSingleDay = span.start === span.end;
 
-        let capClass = '';
-        if (isStart && isEnd) {
-          capClass = 'cap-left cap-right';
-        } else if (isStart || (isMonday && !isStart)) {
-          capClass = isEnd ? 'cap-left cap-right' : 'cap-left';
-          if (isStart) capClass = isEnd ? 'cap-left cap-right' : 'cap-left';
-          else if (isMonday) capClass = isEnd ? 'cap-right' : 'cap-none';
-        } else if (isEnd || (isSunday && !isEnd)) {
-          capClass = 'cap-right';
-          if (isSunday && !isEnd) capClass = 'cap-none';
-        } else {
-          capClass = 'cap-none';
+          // Determine half-width class
+          let posClass = 'full-width';
+          if (!isSingleDay) {
+            if (isStart && isEnd) {
+              posClass = 'full-width'; // shouldn't happen for multi-day
+            } else if (isStart) {
+              posClass = 'half-right'; // checkin day: right half
+            } else if (isEnd) {
+              posClass = 'half-left';  // checkout day: left half
+            }
+          }
+
+          // Rounded ends only at actual booking start/end, not at week boundaries
+          let roundClass = '';
+          if (isStart) roundClass += ' round-left';
+          if (isEnd) roundClass += ' round-right';
+          if (isSingleDay) roundClass = ' round-left round-right';
+
+          const barType = span.type === 'clean' ? 'cal-bar-clean' :
+                          span.type === 'cancelled' ? 'cal-bar-cancelled' :
+                          span.type === 'block' ? 'cal-bar-cancelled' : 'cal-bar-booking';
+          const showLabel = isStart || (d.getDay() === 1 && !isStart);
+          const labelText = showLabel ? escapeHtml(span.label) : '';
+          const dataAttr = `data-span='${JSON.stringify({
+            guestName: span.label,
+            checkin: span.booking ? span.booking.checkin : span.start,
+            checkout: span.booking ? span.booking.checkout : span.end,
+            nights: span.booking ? span.booking.nights : null,
+            status: span.booking ? span.booking.status : (span.cleaning ? span.cleaning.status : ''),
+            cleanDate: span.cleaning ? span.cleaning.cleaning_date : null,
+            type: span.type
+          }).replace(/'/g, '&#39;')}'`;
+
+          barsHtml += `<div class="cal-bar ${barType} ${posClass} row-${r} ${roundClass.trim()}" ${dataAttr} onclick="showCalPopup(this)">${labelText}</div>`;
         }
-
-        // Simplify: left cap on check-in or monday continuation, right cap on checkout or sunday wrap
-        capClass = '';
-        if (isStart) capClass += ' cap-left';
-        if (isEnd) capClass += ' cap-right';
-        if (isMonday && !isStart) capClass += ' cap-left';
-        if (isSunday && !isEnd) capClass += ' cap-right';
-        if (!capClass.includes('cap-left') && !capClass.includes('cap-right')) capClass = ' cap-none';
-
-        const barType = span.type === 'clean' ? 'cal-bar-clean' :
-                        span.type === 'cancelled' ? 'cal-bar-cancelled' : 'cal-bar-booking';
-        const showLabel = isStart || (isMonday && !isStart);
-        const labelText = showLabel ? escapeHtml(span.label) : '';
-        const dataAttr = `data-span='${JSON.stringify({
-          guestName: span.label,
-          checkin: span.booking ? span.booking.checkin : span.start,
-          checkout: span.booking ? span.booking.checkout : span.end,
-          nights: span.booking ? span.booking.nights : null,
-          status: span.booking ? span.booking.status : (span.cleaning ? span.cleaning.status : ''),
-          cleanDate: span.cleaning ? span.cleaning.cleaning_date : null,
-          type: span.type
-        }).replace(/'/g, '&#39;')}'`;
-
-        barsHtml += `<div class="cal-bar ${barType} ${capClass.trim()}" ${dataAttr} onclick="showCalPopup(this)">${labelText}</div>`;
-      } else {
-        barsHtml += '<div class="cal-bar-spacer"></div>';
       }
     }
     barsHtml += '</div>';
