@@ -746,7 +746,7 @@ function closeCalPopup() {
 // ========================================
 async function loadBookings() {
   const tbody = document.getElementById('bookingsBody');
-  tbody.innerHTML = '<tr><td colspan="10" class="loading-placeholder">Loading...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="11" class="loading-placeholder">Loading...</td></tr>';
 
   try {
     // Booking-centric: get ALL bookings, then join their cleanings
@@ -769,7 +769,7 @@ async function loadBookings() {
     });
 
     if (!allBookings || allBookings.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No bookings found</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" class="empty-state">No bookings found</td></tr>';
       return;
     }
 
@@ -838,13 +838,14 @@ async function loadBookings() {
         <td>${c ? formatDate(c.cleaning_date) : '—'}</td>
         <td>${c ? formatPounds(c.rate_amount) : '—'}</td>
         <td>${c?.added_to_planner ? '<span class="badge badge-planner">Yes</span>' : (c ? '<span class="badge" style="background-color:#e8e5e0 !important; color:#999 !important;">No</span>' : '—')}</td>
+        <td>${c?.damage_notes ? `<span class="badge badge-pending" title="${escapeHtml(c.damage_notes)}" style="cursor:help;">Has notes</span>` : '—'}</td>
         <td>${inv ? (inv.status === 'paid' ? '<span class="badge badge-complete">Paid</span>' : '<span class="badge badge-pending">Unpaid</span>') : '—'}</td>
         <td>${actionHtml}</td>
       </tr>`;
     }).join('');
   } catch (err) {
     console.error('Bookings load error:', err);
-    tbody.innerHTML = '<tr><td colspan="10" class="loading-placeholder">Failed to load bookings</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="loading-placeholder">Failed to load bookings</td></tr>';
   }
 }
 
