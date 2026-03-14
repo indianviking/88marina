@@ -235,27 +235,43 @@ function toDateStr(date) {
 }
 
 function calculateCleaningDate(checkoutDate, allBookings, bankHolidays) {
-  const dow = checkoutDate.getDay();
-  const isWeekend = dow === 0 || dow === 6;
-  if (!isWeekend) return { date: checkoutDate, rateType: 'standard' };
+  const bhSet = new Set(bankHolidays);
 
-  const sameDayCheckin = allBookings.some(b =>
-    new Date(b.checkin).toDateString() === checkoutDate.toDateString() && b.status === 'confirmed'
+  const isNonWorkDay = (d) => {
+    const dow = d.getDay();
+    return dow === 0 || dow === 6 || bhSet.has(toDateStr(d));
+  };
+
+  const hasSameDayCheckin = (d) => allBookings.some(b =>
+    new Date(b.checkin).toDateString() === d.toDateString() && b.status === 'confirmed'
   );
-  if (sameDayCheckin) {
-    const isBH = bankHolidays.includes(toDateStr(checkoutDate));
-    return { date: checkoutDate, rateType: isBH ? 'bank_holiday' : 'weekend' };
+
+  const getRateType = (d) => {
+    const dow = d.getDay();
+    if (bhSet.has(toDateStr(d))) return 'bank_holiday';
+    if (dow === 0 || dow === 6) return 'weekend';
+    return 'standard';
+  };
+
+  // If checkout day is a working day, clean on checkout
+  if (!isNonWorkDay(checkoutDate)) {
+    return { date: checkoutDate, rateType: 'standard' };
   }
 
-  const monday = new Date(checkoutDate);
-  monday.setDate(monday.getDate() + (dow === 6 ? 2 : 1));
+  // Checkout is on a weekend or bank holiday
+  // If there's a same-day checkin, must clean that day regardless
+  if (hasSameDayCheckin(checkoutDate)) {
+    return { date: checkoutDate, rateType: getRateType(checkoutDate) };
+  }
 
-  const mondayCheckin = allBookings.some(b =>
-    new Date(b.checkin).toDateString() === monday.toDateString() && b.status === 'confirmed'
-  );
+  // Move forward to the next working day
+  const nextDay = new Date(checkoutDate);
+  nextDay.setDate(nextDay.getDate() + 1);
+  while (isNonWorkDay(nextDay)) {
+    nextDay.setDate(nextDay.getDate() + 1);
+  }
 
-  const isBH = bankHolidays.includes(toDateStr(monday));
-  return { date: monday, rateType: isBH ? 'bank_holiday' : 'standard', conflict: mondayCheckin };
+  return { date: nextDay, rateType: 'standard', conflict: hasSameDayCheckin(nextDay) };
 }
 
 async function sendNotificationEmail(cfg, added, cancelled) {
