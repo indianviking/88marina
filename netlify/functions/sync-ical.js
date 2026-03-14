@@ -161,11 +161,43 @@ exports.handler = async (event) => {
       }
     }
 
+    // 5b. Recalculate clean dates for all future pending cleans
+    // This handles cases where a new booking creates a same-day checkin conflict,
+    // or where a clean was pushed to a non-work day that now has a booking
+    const today = toDateStr(new Date());
+    const { data: futurePending } = await supabase
+      .from('cleanings')
+      .select('*, booking:bookings(*)')
+      .eq('status', 'pending')
+      .gte('cleaning_date', today);
+
+    const { data: freshBookings } = await supabase
+      .from('bookings')
+      .select('checkin, checkout, status')
+      .eq('status', 'confirmed');
+
+    let adjusted = 0;
+    for (const c of (futurePending || [])) {
+      if (!c.booking || c.booking.status !== 'confirmed') continue;
+      const checkoutDate = new Date(c.booking.checkout + 'T00:00:00');
+      const newResult = calculateCleaningDate(checkoutDate, freshBookings || [], bankHolidays);
+      const newDateStr = toDateStr(newResult.date);
+      if (newDateStr !== c.cleaning_date || newResult.rateType !== c.rate_type) {
+        const rateAmount = parseInt(cfg[`rate_${newResult.rateType}`] || cfg.rate_standard);
+        await supabase.from('cleanings').update({
+          cleaning_date: newDateStr,
+          rate_type: newResult.rateType,
+          rate_amount: rateAmount
+        }).eq('id', c.id);
+        adjusted++;
+      }
+    }
+
     // 6. Log sync
     await supabase.from('sync_log').insert({
       bookings_added: added,
       bookings_cancelled: cancelled,
-      notes: `Added: ${added}, Cancelled: ${cancelled}`
+      notes: `Added: ${added}, Cancelled: ${cancelled}${adjusted > 0 ? `, Adjusted: ${adjusted}` : ''}`
     });
 
     // 7. Send email notifications if changes
