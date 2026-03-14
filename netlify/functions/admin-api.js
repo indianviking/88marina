@@ -217,9 +217,6 @@ exports.handler = async (event) => {
           if (existingBooking) {
             bookingId = existingBooking.id;
           } else {
-            const ci = new Date(item.checkin + 'T00:00:00');
-            const co = new Date(item.checkout + 'T00:00:00');
-            const nights = Math.round((co - ci) / (1000 * 60 * 60 * 24));
             const { data: newBooking, error: bErr } = await supabase
               .from('bookings')
               .insert({
@@ -227,7 +224,6 @@ exports.handler = async (event) => {
                 guest_name: item.guest_name,
                 checkin: item.checkin,
                 checkout: item.checkout,
-                nights,
                 status: 'confirmed'
               })
               .select()
