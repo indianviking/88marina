@@ -707,39 +707,105 @@ function closeCalPopup() {
 // ========================================
 async function loadBookings() {
   const tbody = document.getElementById('bookingsBody');
-  tbody.innerHTML = '<tr><td colspan="10" class="loading-placeholder">Loading...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="11" class="loading-placeholder">Loading...</td></tr>';
 
   try {
-    const { data, error } = await db
+    // Fetch cleanings (real bookings with cleans)
+    const { data: cleaningsData, error: cErr } = await db
       .from('cleanings')
       .select('*, booking:bookings(*), invoice:invoices(*)')
       .order('cleaning_date', { ascending: false });
-    if (error) throw error;
+    if (cErr) throw cErr;
 
-    // Filter out block bookings and "Not available" entries from the bookings table
-    const filtered = (data || []).filter(c => {
+    // Also fetch block/dismissed bookings (no cleaning record)
+    const { data: blockData, error: bErr } = await db
+      .from('bookings')
+      .select('*')
+      .in('status', ['block', 'dismissed'])
+      .order('checkin', { ascending: false });
+    if (bErr) throw bErr;
+
+    // Build combined rows
+    const rows = [];
+
+    // Add cleaning rows
+    (cleaningsData || []).forEach(c => {
       const b = c.booking;
-      if (!b) return true;
-      if (b.status === 'block' || b.status === 'dismissed') return false;
-      const name = (b.guest_name || '').toLowerCase();
-      if (name.includes('not available') || name.includes('unavailable')) return false;
-      return true;
+      const name = (b?.guest_name || '').toLowerCase();
+      let airbnbLabel = 'Reserved';
+      if (name.includes('not available') || name.includes('unavailable')) {
+        airbnbLabel = 'Not available';
+      } else if (b?.airbnb_uid?.startsWith('manual-')) {
+        airbnbLabel = 'Manual';
+      }
+      rows.push({
+        sortDate: c.cleaning_date,
+        type: 'cleaning',
+        cleaning: c,
+        booking: b,
+        invoice: c.invoice,
+        airbnbLabel
+      });
     });
 
-    if (filtered.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No bookings found</td></tr>';
+    // Add block rows (no cleaning record)
+    (blockData || []).forEach(b => {
+      rows.push({
+        sortDate: b.checkin,
+        type: 'block',
+        cleaning: null,
+        booking: b,
+        invoice: null,
+        airbnbLabel: 'Not available'
+      });
+    });
+
+    // Sort by most recent first
+    rows.sort((a, b) => b.sortDate.localeCompare(a.sortDate));
+
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="11" class="empty-state">No bookings found</td></tr>';
       return;
     }
 
-    tbody.innerHTML = filtered.map(c => {
-      const b = c.booking;
-      const inv = c.invoice;
+    tbody.innerHTML = rows.map(row => {
+      const b = row.booking;
+      const c = row.cleaning;
+      const inv = row.invoice;
+
+      if (row.type === 'block') {
+        // Block row — no cleaning
+        const statusBadge = b.status === 'dismissed'
+          ? '<span class="badge badge-grey" style="background-color:#e8e5e0 !important; color:#999 !important;">Dismissed</span>'
+          : '<span class="badge badge-pending">Block</span>';
+        return `<tr style="opacity:0.6;">
+          <td>—</td>
+          <td>${formatDateShort(b.checkin)}</td>
+          <td>${formatDateShort(b.checkout)}</td>
+          <td><span class="badge badge-pending">Not available</span></td>
+          <td>—</td>
+          <td>${statusBadge}</td>
+          <td>—</td>
+          <td>—</td>
+          <td>—</td>
+          <td>—</td>
+          <td>—</td>
+        </tr>`;
+      }
+
+      // Normal cleaning row
       const isCancelled = c.status === 'cancelled';
+      const labelBadge = row.airbnbLabel === 'Reserved'
+        ? '<span class="badge badge-complete">Reserved</span>'
+        : row.airbnbLabel === 'Manual'
+          ? '<span class="badge badge-planner">Manual</span>'
+          : '<span class="badge badge-pending">Not available</span>';
 
       return `<tr>
         <td>${formatDate(c.cleaning_date)}</td>
         <td>${b ? formatDateShort(b.checkin) : '—'}</td>
         <td>${b ? formatDateShort(b.checkout) : '—'}</td>
+        <td>${labelBadge}</td>
         <td>${formatPounds(c.rate_amount)}</td>
         <td><span class="badge badge-${c.status === 'complete' ? 'complete' : c.status === 'cancelled' ? 'cancelled' : 'pending'}">${c.status}</span></td>
         <td>${c.added_to_planner ? '<span class="badge badge-planner">Yes</span>' : '<span class="badge badge-grey" style="background-color:#e8e5e0 !important; color:#999 !important;">No</span>'}</td>
@@ -751,7 +817,7 @@ async function loadBookings() {
     }).join('');
   } catch (err) {
     console.error('Bookings load error:', err);
-    tbody.innerHTML = '<tr><td colspan="10" class="loading-placeholder">Failed to load bookings</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="loading-placeholder">Failed to load bookings</td></tr>';
   }
 }
 
