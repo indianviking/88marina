@@ -1,5 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
-const { sendPush } = require('./notify');
+const { sendPush, shouldSend } = require('./notify');
 const { sendEmail } = require('./send-email');
 
 const supabase = createClient(
@@ -33,16 +33,13 @@ exports.handler = async function () {
       const d = new Date(c.cleaning_date + 'T00:00:00');
       const dateStr = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
 
-      // Push notification
-      await sendPush(
-        'cleaner',
-        '🔔 Clean Tomorrow',
-        `Reminder: ${guest} clean is due ${dateStr}`,
-        'https://marinacleaning.netlify.app/'
-      );
+      // Push notification (based on prefs)
+      const msg = `Reminder: ${guest} clean is due ${dateStr}`;
+      if (shouldSend(cfg, 'notify_reminder_cleaner', 'push', 'both'))
+        await sendPush('cleaner', '🔔 Clean Tomorrow', msg, 'https://marinacleaning.netlify.app/');
 
-      // Email
-      if (cfg.cleaner_email) {
+      // Email (based on prefs)
+      if (shouldSend(cfg, 'notify_reminder_cleaner', 'email', 'both') && cfg.cleaner_email) {
         try {
           await sendEmail(cfg.cleaner_email, '88 Marina — Clean tomorrow',
             `Hi ${cfg.cleaner_name || 'Cleaner'},\n\nReminder: you have a clean due tomorrow (${dateStr}) for ${guest} at ${cfg.property_name || '88 Marina'}.\n\nCheck the schedule: https://marinacleaning.netlify.app/\n\nThanks`);

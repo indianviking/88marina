@@ -899,6 +899,40 @@ html, body {
   margin-bottom: 8px;
 }
 
+.notify-prefs-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.notify-prefs-table th,
+.notify-prefs-table td {
+  padding: 8px 12px !important;
+  border-bottom: 1px solid #C8C3BB !important;
+  text-align: center !important;
+  font-size: 13px !important;
+  color: #1a1a18 !important;
+}
+.notify-prefs-table th:first-child,
+.notify-prefs-table td:first-child {
+  text-align: left !important;
+  font-weight: 500 !important;
+}
+.notify-prefs-table th {
+  font-weight: 600 !important;
+  font-size: 11px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  color: #666 !important;
+  background-color: #f8f6f2 !important;
+}
+.notify-prefs-table select {
+  padding: 4px 8px !important;
+  border: 1px solid #C8C3BB !important;
+  border-radius: 4px !important;
+  font-size: 12px !important;
+  background-color: #FFFFFF !important;
+  color: #1a1a18 !important;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -48,4 +48,18 @@ async function sendPush(role, heading, message, url) {
   }
 }
 
-module.exports = { sendPush };
+/**
+ * Check if a notification should be sent based on settings
+ * @param {object} cfg - settings object
+ * @param {string} settingKey - e.g. 'notify_new_clean_cleaner'
+ * @param {string} method - 'push' or 'email'
+ * @param {string} defaultVal - default if setting not found
+ */
+function shouldSend(cfg, settingKey, method, defaultVal) {
+  const pref = cfg[settingKey] || defaultVal;
+  if (pref === 'off') return false;
+  if (pref === 'both') return true;
+  return pref === method;
+}
+
+module.exports = { sendPush, shouldSend };

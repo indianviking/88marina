@@ -1,7 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const https = require('https');
 const http = require('http');
-const { sendPush } = require('./notify');
+const { sendPush, shouldSend } = require('./notify');
 const { sendEmail } = require('./send-email');
 
 // Fetch UK (England & Wales) bank holidays from GOV.UK API
@@ -211,27 +211,34 @@ exports.handler = async (event) => {
       }
     }
 
-    // 8. Send push notifications + emails for new/cancelled cleans
+    // 8. Send notifications based on preferences
     const cleanerEmail = cfg.cleaner_email;
+    const adminEmail = process.env.GMAIL_USER; // admin gets emails to their own gmail
     for (const b of addedBookings) {
       const cleanDate = b.cleaning ? formatDateNice(b.cleaning.cleaning_date) : formatDateNice(b.checkout);
-      await sendPush('cleaner', '🧹 New Clean Added', `Clean scheduled for ${cleanDate} (${b.guest_name})`, 'https://marinacleaning.netlify.app/');
-      await sendPush('admin', '📋 New Booking Synced', `${b.guest_name}: ${formatDateNice(b.checkin)} → ${formatDateNice(b.checkout)}`, 'https://marinacleaning.netlify.app/admin');
-      if (cleanerEmail) {
-        try {
-          await sendEmail(cleanerEmail, '88 Marina — New clean scheduled',
-            `Hi ${cfg.cleaner_name || 'Cleaner'},\n\nA new clean has been scheduled for ${cleanDate} (${b.guest_name}).\n\nCheck the schedule: https://marinacleaning.netlify.app/\n\nThanks`);
-        } catch (e) { console.error('Email error:', e.message); }
+      const msg = `Clean scheduled for ${cleanDate} (${b.guest_name})`;
+      if (shouldSend(cfg, 'notify_new_clean_cleaner', 'push', 'both'))
+        await sendPush('cleaner', '🧹 New Clean Added', msg, 'https://marinacleaning.netlify.app/');
+      if (shouldSend(cfg, 'notify_new_clean_cleaner', 'email', 'both') && cleanerEmail) {
+        try { await sendEmail(cleanerEmail, '88 Marina — New clean scheduled', `Hi ${cfg.cleaner_name || 'Cleaner'},\n\n${msg}.\n\nCheck the schedule: https://marinacleaning.netlify.app/\n\nThanks`); } catch (e) { console.error('Email error:', e.message); }
+      }
+      if (shouldSend(cfg, 'notify_new_clean_admin', 'push', 'push'))
+        await sendPush('admin', '📋 New Booking Synced', `${b.guest_name}: ${formatDateNice(b.checkin)} → ${formatDateNice(b.checkout)}`, 'https://marinacleaning.netlify.app/admin');
+      if (shouldSend(cfg, 'notify_new_clean_admin', 'email', 'push') && adminEmail) {
+        try { await sendEmail(adminEmail, '88 Marina — New booking synced', `New booking: ${b.guest_name}\n${formatDateNice(b.checkin)} → ${formatDateNice(b.checkout)}\nClean: ${cleanDate}\n\nhttps://marinacleaning.netlify.app/admin`); } catch (e) { console.error('Email error:', e.message); }
       }
     }
     for (const b of cancelledBookings) {
-      await sendPush('cleaner', '❌ Clean Cancelled', `Booking cancelled for ${b.guest_name} (${formatDateNice(b.checkin)} → ${formatDateNice(b.checkout)})`, 'https://marinacleaning.netlify.app/');
-      await sendPush('admin', '❌ Booking Cancelled', `${b.guest_name}: ${formatDateNice(b.checkin)} → ${formatDateNice(b.checkout)}`, 'https://marinacleaning.netlify.app/admin');
-      if (cleanerEmail) {
-        try {
-          await sendEmail(cleanerEmail, '88 Marina — Clean cancelled',
-            `Hi ${cfg.cleaner_name || 'Cleaner'},\n\nThe clean for ${b.guest_name} (${formatDateNice(b.checkin)} → ${formatDateNice(b.checkout)}) has been cancelled.\n\nCheck the schedule: https://marinacleaning.netlify.app/\n\nThanks`);
-        } catch (e) { console.error('Email error:', e.message); }
+      const msg = `Booking cancelled for ${b.guest_name} (${formatDateNice(b.checkin)} → ${formatDateNice(b.checkout)})`;
+      if (shouldSend(cfg, 'notify_cancelled_cleaner', 'push', 'both'))
+        await sendPush('cleaner', '❌ Clean Cancelled', msg, 'https://marinacleaning.netlify.app/');
+      if (shouldSend(cfg, 'notify_cancelled_cleaner', 'email', 'both') && cleanerEmail) {
+        try { await sendEmail(cleanerEmail, '88 Marina — Clean cancelled', `Hi ${cfg.cleaner_name || 'Cleaner'},\n\n${msg}.\n\nCheck the schedule: https://marinacleaning.netlify.app/\n\nThanks`); } catch (e) { console.error('Email error:', e.message); }
+      }
+      if (shouldSend(cfg, 'notify_cancelled_admin', 'push', 'push'))
+        await sendPush('admin', '❌ Booking Cancelled', `${b.guest_name}: ${formatDateNice(b.checkin)} → ${formatDateNice(b.checkout)}`, 'https://marinacleaning.netlify.app/admin');
+      if (shouldSend(cfg, 'notify_cancelled_admin', 'email', 'push') && adminEmail) {
+        try { await sendEmail(adminEmail, '88 Marina — Booking cancelled', `Cancelled: ${b.guest_name}\n${formatDateNice(b.checkin)} → ${formatDateNice(b.checkout)}\n\nhttps://marinacleaning.netlify.app/admin`); } catch (e) { console.error('Email error:', e.message); }
       }
     }
 

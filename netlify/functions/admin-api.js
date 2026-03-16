@@ -32,8 +32,7 @@ exports.handler = async (event) => {
         for (const [key, value] of Object.entries(settingsObj)) {
           await supabase
             .from('settings')
-            .update({ value: String(value), updated_at: new Date().toISOString() })
-            .eq('key', key);
+            .upsert({ key, value: String(value), updated_at: new Date().toISOString() }, { onConflict: 'key' });
         }
         return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
       }

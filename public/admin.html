@@ -302,6 +302,103 @@
           </div>
         </div>
 
+        <!-- Notification preferences -->
+        <div class="card settings-group">
+          <h3 class="card-title">Notification preferences</h3>
+          <p class="field-hint" style="margin-bottom:12px !important;">Choose how each notification is delivered. Push = browser notification, Email = email to cleaner address above.</p>
+          <table class="notify-prefs-table">
+            <thead>
+              <tr>
+                <th style="text-align:left !important;">Notification</th>
+                <th>Cleaner</th>
+                <th>Admin</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>New clean added</td>
+                <td>
+                  <select data-key="notify_new_clean_cleaner">
+                    <option value="both">Push + Email</option>
+                    <option value="push">Push only</option>
+                    <option value="email">Email only</option>
+                    <option value="off">Off</option>
+                  </select>
+                </td>
+                <td>
+                  <select data-key="notify_new_clean_admin">
+                    <option value="push">Push only</option>
+                    <option value="both">Push + Email</option>
+                    <option value="email">Email only</option>
+                    <option value="off">Off</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>Clean cancelled</td>
+                <td>
+                  <select data-key="notify_cancelled_cleaner">
+                    <option value="both">Push + Email</option>
+                    <option value="push">Push only</option>
+                    <option value="email">Email only</option>
+                    <option value="off">Off</option>
+                  </select>
+                </td>
+                <td>
+                  <select data-key="notify_cancelled_admin">
+                    <option value="push">Push only</option>
+                    <option value="both">Push + Email</option>
+                    <option value="email">Email only</option>
+                    <option value="off">Off</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>Day-before reminder</td>
+                <td>
+                  <select data-key="notify_reminder_cleaner">
+                    <option value="both">Push + Email</option>
+                    <option value="push">Push only</option>
+                    <option value="email">Email only</option>
+                    <option value="off">Off</option>
+                  </select>
+                </td>
+                <td>
+                  <span style="color:#999 !important;">—</span>
+                </td>
+              </tr>
+              <tr>
+                <td>Cleaner added to planner</td>
+                <td>
+                  <span style="color:#999 !important;">—</span>
+                </td>
+                <td>
+                  <select data-key="notify_planner_admin">
+                    <option value="push">Push only</option>
+                    <option value="both">Push + Email</option>
+                    <option value="email">Email only</option>
+                    <option value="off">Off</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>Cleaner completed clean</td>
+                <td>
+                  <span style="color:#999 !important;">—</span>
+                </td>
+                <td>
+                  <select data-key="notify_complete_admin">
+                    <option value="push">Push only</option>
+                    <option value="both">Push + Email</option>
+                    <option value="email">Email only</option>
+                    <option value="off">Off</option>
+                  </select>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
         <button type="submit" class="btn btn-green btn-lg">Save all settings</button>
       </form>
     </section>

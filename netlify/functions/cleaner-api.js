@@ -1,5 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
-const { sendPush } = require('./notify');
+const { sendPush, shouldSend } = require('./notify');
+const { sendEmail } = require('./send-email');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -55,13 +56,20 @@ exports.handler = async (event) => {
           detail: added ? 'Cleaner added to planner' : 'Cleaner removed from planner'
         });
 
-        // Notify admin when cleaner adds to planner
+        // Notify admin when cleaner adds to planner (based on prefs)
         if (added) {
           const { data: cl } = await supabase.from('cleanings').select('cleaning_date, booking:bookings(guest_name)').eq('id', body.cleaning_id).single();
+          const { data: stngs } = await supabase.from('settings').select('key, value');
+          const cfg = Object.fromEntries((stngs || []).map(s => [s.key, s.value]));
           if (cl) {
             const d = new Date(cl.cleaning_date + 'T00:00:00');
             const dateStr = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-            await sendPush('admin', '✅ Added to Planner', `Cleaner confirmed ${dateStr} clean (${cl.booking?.guest_name || 'Guest'})`, 'https://marinacleaning.netlify.app/admin');
+            const msg = `Cleaner confirmed ${dateStr} clean (${cl.booking?.guest_name || 'Guest'})`;
+            if (shouldSend(cfg, 'notify_planner_admin', 'push', 'push'))
+              await sendPush('admin', '✅ Added to Planner', msg, 'https://marinacleaning.netlify.app/admin');
+            if (shouldSend(cfg, 'notify_planner_admin', 'email', 'push') && process.env.GMAIL_USER) {
+              try { await sendEmail(process.env.GMAIL_USER, '88 Marina — Cleaner added to planner', msg + '\n\nhttps://marinacleaning.netlify.app/admin'); } catch (e) { console.error('Email error:', e.message); }
+            }
           }
         }
 
@@ -91,12 +99,19 @@ exports.handler = async (event) => {
           detail: 'Cleaning marked complete'
         });
 
-        // Notify admin when cleaner completes a clean
+        // Notify admin when cleaner completes a clean (based on prefs)
         const { data: compCl } = await supabase.from('cleanings').select('cleaning_date, booking:bookings(guest_name)').eq('id', body.cleaning_id).single();
+        const { data: compStngs } = await supabase.from('settings').select('key, value');
+        const compCfg = Object.fromEntries((compStngs || []).map(s => [s.key, s.value]));
         if (compCl) {
           const d = new Date(compCl.cleaning_date + 'T00:00:00');
           const dateStr = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-          await sendPush('admin', '🏠 Clean Completed', `Cleaner finished ${dateStr} clean (${compCl.booking?.guest_name || 'Guest'})`, 'https://marinacleaning.netlify.app/admin');
+          const msg = `Cleaner finished ${dateStr} clean (${compCl.booking?.guest_name || 'Guest'})`;
+          if (shouldSend(compCfg, 'notify_complete_admin', 'push', 'push'))
+            await sendPush('admin', '🏠 Clean Completed', msg, 'https://marinacleaning.netlify.app/admin');
+          if (shouldSend(compCfg, 'notify_complete_admin', 'email', 'push') && process.env.GMAIL_USER) {
+            try { await sendEmail(process.env.GMAIL_USER, '88 Marina — Clean completed', msg + '\n\nhttps://marinacleaning.netlify.app/admin'); } catch (e) { console.error('Email error:', e.message); }
+          }
         }
 
         return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
