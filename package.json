@@ -11,6 +11,15 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@supabase/supabase-js": "^2.99.1"
-  }
+    "@supabase/supabase-js": "^2.99.1",
+    "nodemailer": "^8.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/indianviking/88marina.git"
+  },
+  "bugs": {
+    "url": "https://github.com/indianviking/88marina/issues"
+  },
+  "homepage": "https://github.com/indianviking/88marina#readme"
 }
