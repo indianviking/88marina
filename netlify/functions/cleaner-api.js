@@ -58,6 +58,16 @@ exports.handler = async (event) => {
 
       // Mark complete
       case 'mark_complete': {
+        // Server-side guard: only allow completion on or after the cleaning date
+        const { data: cleanRec } = await supabase
+          .from('cleanings').select('cleaning_date').eq('id', body.cleaning_id).single();
+        if (cleanRec) {
+          const today = new Date().toISOString().split('T')[0];
+          if (cleanRec.cleaning_date > today) {
+            return { statusCode: 400, headers, body: JSON.stringify({ error: 'Cannot complete a clean before its scheduled date' }) };
+          }
+        }
+
         await supabase
           .from('cleanings')
           .update({ status: 'complete', completed_at: new Date().toISOString() })

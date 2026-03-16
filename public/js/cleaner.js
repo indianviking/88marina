@@ -221,13 +221,18 @@ function createCleanCard(clean) {
     const plannerText = clean.added_to_planner ? 'Added to planner &#10003;' : 'Added to planner?';
     const plannerClass = clean.added_to_planner ? 'btn btn-planner added' : 'btn btn-planner';
 
+    // Only allow completion on or after the cleaning date
+    const todayStr = new Date().toISOString().split('T')[0];
+    const canComplete = clean.cleaning_date <= todayStr;
+    const completeBtn = canComplete
+      ? `<button class="btn btn-complete" onclick="markComplete('${clean.id}', this)">Mark complete</button>`
+      : `<button class="btn btn-complete" disabled style="opacity:0.4 !important; cursor:not-allowed !important;">Available on ${formatDate(clean.cleaning_date)}</button>`;
+
     actionsHtml = `
       <button class="${plannerClass}" onclick="togglePlanner('${clean.id}', this, ${clean.added_to_planner ? 'true' : 'false'})">
         ${plannerText}
       </button>
-      <button class="btn btn-complete" onclick="markComplete('${clean.id}', this)">
-        Mark complete
-      </button>
+      ${completeBtn}
       <button class="btn btn-checklist" onclick="toggleChecklist('${clean.id}', this)">
         Checklist
       </button>`;

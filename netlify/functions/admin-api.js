@@ -311,6 +311,16 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
       }
 
+      // ---- Reset cleaning to pending ----
+      case 'reset_to_pending': {
+        const { error } = await supabase
+          .from('cleanings')
+          .update({ status: 'pending', completed_at: null })
+          .eq('id', body.cleaning_id);
+        if (error) throw error;
+        return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
+      }
+
       default:
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Unknown action: ' + action }) };
     }
