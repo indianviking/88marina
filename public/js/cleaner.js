@@ -218,7 +218,7 @@ function createCleanCard(clean) {
         Acknowledge
       </button>`;
   } else {
-    const plannerText = clean.added_to_planner ? 'Added to planner &#10003;' : 'Added to planner?';
+    const plannerText = clean.added_to_planner ? 'Added to planner &#10003;' : 'Add to planner';
     const plannerClass = clean.added_to_planner ? 'btn btn-planner added' : 'btn btn-planner';
 
     // Only allow completion on or after the cleaning date
@@ -226,7 +226,7 @@ function createCleanCard(clean) {
     const canComplete = clean.cleaning_date <= todayStr;
     const completeBtn = canComplete
       ? `<button class="btn btn-complete" onclick="markComplete('${clean.id}', this)">Mark complete</button>`
-      : `<button class="btn btn-complete" disabled style="opacity:0.4 !important; cursor:not-allowed !important;">Available on ${formatDate(clean.cleaning_date)}</button>`;
+      : `<button class="btn btn-complete" disabled style="opacity:0.4 !important; cursor:not-allowed !important;">Mark complete<br><span style="font-size:10px !important; font-weight:400 !important; opacity:0.8 !important;">Available on ${formatDate(clean.cleaning_date)}</span></button>`;
 
     actionsHtml = `
       <button class="${plannerClass}" onclick="togglePlanner('${clean.id}', this, ${clean.added_to_planner ? 'true' : 'false'})">
@@ -313,7 +313,7 @@ async function togglePlanner(cleaningId, btn, currentState) {
         if (newBadge) newBadge.remove();
       }
     } else {
-      btn.innerHTML = 'Added to planner?';
+      btn.innerHTML = 'Add to planner';
       btn.classList.remove('added');
       btn.onclick = () => togglePlanner(cleaningId, btn, false);
       // Re-add "New" badge when removed from planner
