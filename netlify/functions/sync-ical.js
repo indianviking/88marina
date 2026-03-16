@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const https = require('https');
 const http = require('http');
+const { sendPush } = require('./notify');
 
 // Fetch UK (England & Wales) bank holidays from GOV.UK API
 async function fetchBankHolidays() {
@@ -209,6 +210,17 @@ exports.handler = async (event) => {
       }
     }
 
+    // 8. Send push notifications for new/cancelled cleans
+    for (const b of addedBookings) {
+      const cleanDate = b.cleaning ? formatDateNice(b.cleaning.cleaning_date) : formatDateNice(b.checkout);
+      await sendPush('cleaner', '🧹 New Clean Added', `Clean scheduled for ${cleanDate} (${b.guest_name})`, 'https://marinacleaning.netlify.app/');
+      await sendPush('admin', '📋 New Booking Synced', `${b.guest_name}: ${formatDateNice(b.checkin)} → ${formatDateNice(b.checkout)}`, 'https://marinacleaning.netlify.app/admin');
+    }
+    for (const b of cancelledBookings) {
+      await sendPush('cleaner', '❌ Clean Cancelled', `Booking cancelled for ${b.guest_name} (${formatDateNice(b.checkin)} → ${formatDateNice(b.checkout)})`, 'https://marinacleaning.netlify.app/');
+      await sendPush('admin', '❌ Booking Cancelled', `${b.guest_name}: ${formatDateNice(b.checkin)} → ${formatDateNice(b.checkout)}`, 'https://marinacleaning.netlify.app/admin');
+    }
+
     return {
       statusCode: 200,
       body: JSON.stringify({ added, cancelled, message: `Sync complete. Added: ${added}, Cancelled: ${cancelled}` })
@@ -264,6 +276,11 @@ function fetchUrl(url) {
 
 function toDateStr(date) {
   return date.toISOString().split('T')[0];
+}
+
+function formatDateNice(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function calculateCleaningDate(checkoutDate, allBookings, bankHolidays) {

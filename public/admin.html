@@ -6,6 +6,16 @@
   <title>88 Marina — Admin</title>
   <link rel="stylesheet" href="css/admin.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+  <script>
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    OneSignalDeferred.push(async function(OneSignal) {
+      await OneSignal.init({
+        appId: "d5ad5ce2-5acc-464a-aa31-757a3f74726d",
+      });
+      OneSignal.User.addTag("role", "admin");
+    });
+  </script>
 </head>
 <body>
   <!-- Sidebar -->

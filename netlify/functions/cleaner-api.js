@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { sendPush } = require('./notify');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -53,6 +54,17 @@ exports.handler = async (event) => {
           cleaning_id: body.cleaning_id,
           detail: added ? 'Cleaner added to planner' : 'Cleaner removed from planner'
         });
+
+        // Notify admin when cleaner adds to planner
+        if (added) {
+          const { data: cl } = await supabase.from('cleanings').select('cleaning_date, booking:bookings(guest_name)').eq('id', body.cleaning_id).single();
+          if (cl) {
+            const d = new Date(cl.cleaning_date + 'T00:00:00');
+            const dateStr = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+            await sendPush('admin', '✅ Added to Planner', `Cleaner confirmed ${dateStr} clean (${cl.booking?.guest_name || 'Guest'})`, 'https://marinacleaning.netlify.app/admin');
+          }
+        }
+
         return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
       }
 
@@ -78,6 +90,15 @@ exports.handler = async (event) => {
           cleaning_id: body.cleaning_id,
           detail: 'Cleaning marked complete'
         });
+
+        // Notify admin when cleaner completes a clean
+        const { data: compCl } = await supabase.from('cleanings').select('cleaning_date, booking:bookings(guest_name)').eq('id', body.cleaning_id).single();
+        if (compCl) {
+          const d = new Date(compCl.cleaning_date + 'T00:00:00');
+          const dateStr = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+          await sendPush('admin', '🏠 Clean Completed', `Cleaner finished ${dateStr} clean (${compCl.booking?.guest_name || 'Guest'})`, 'https://marinacleaning.netlify.app/admin');
+        }
+
         return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
       }
 
