@@ -53,9 +53,16 @@ const supabase = createClient(
 exports.handler = async (event) => {
   try {
     // 1. Get settings
-    const { data: settings } = await supabase
+    const { data: settings, error: settingsErr } = await supabase
       .from('settings')
       .select('key, value');
+    if (settingsErr) {
+      console.error('Settings error:', settingsErr);
+      return { statusCode: 500, body: JSON.stringify({ error: 'Settings fetch failed', detail: settingsErr.message }) };
+    }
+    if (!settings || settings.length === 0) {
+      return { statusCode: 500, body: JSON.stringify({ error: 'No settings found — check SUPABASE_URL and SUPABASE_SERVICE_KEY env vars' }) };
+    }
     const cfg = Object.fromEntries(settings.map(s => [s.key, s.value]));
 
     if (!cfg.ical_url) {
@@ -252,7 +259,7 @@ exports.handler = async (event) => {
     };
   } catch (err) {
     console.error('Sync error:', err);
-    return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
+    return { statusCode: 500, body: JSON.stringify({ error: err.message, stack: err.stack }) };
   }
 };
 
