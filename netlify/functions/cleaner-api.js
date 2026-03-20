@@ -1,12 +1,11 @@
 const { createClient } = require('@supabase/supabase-js');
 const https = require('https');
-const nodemailer = require('nodemailer');
 
-// --- Inline notification helpers ---
+// --- Inline push notification helper ---
 async function sendPush(role, heading, message, url) {
   const APP_ID = process.env.ONESIGNAL_APP_ID;
   const API_KEY = process.env.ONESIGNAL_API_KEY;
-  if (!APP_ID || !API_KEY) { console.log('OneSignal not configured'); return; }
+  if (!APP_ID || !API_KEY) return;
   const payload = JSON.stringify({
     app_id: APP_ID, headings: { en: heading }, contents: { en: message },
     filters: [{ field: 'tag', key: 'role', relation: '=', value: role }],
@@ -16,7 +15,7 @@ async function sendPush(role, heading, message, url) {
     const req = https.request({
       hostname: 'api.onesignal.com', path: '/notifications', method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Key ${API_KEY}`, 'Content-Length': Buffer.byteLength(payload) }
-    }, res => { let b = ''; res.on('data', c => b += c); res.on('end', () => { resolve(); }); });
+    }, res => { let b = ''; res.on('data', c => b += c); res.on('end', () => resolve()); });
     req.on('error', () => resolve());
     req.write(payload); req.end();
   });
@@ -27,12 +26,6 @@ function shouldSend(cfg, key, method, defaultVal) {
   if (pref === 'off') return false;
   if (pref === 'both') return true;
   return pref === method;
-}
-
-async function sendEmail(to, subject, text) {
-  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) return;
-  const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD } });
-  await transporter.sendMail({ from: `"88 Marina" <${process.env.GMAIL_USER}>`, to, subject, text });
 }
 
 const supabase = createClient(
@@ -100,9 +93,6 @@ exports.handler = async (event) => {
             const msg = `Cleaner confirmed ${dateStr} clean (${cl.booking?.guest_name || 'Guest'})`;
             if (shouldSend(cfg, 'notify_planner_admin', 'push', 'push'))
               await sendPush('admin', '✅ Added to Planner', msg, 'https://marinacleaning.netlify.app/admin');
-            if (shouldSend(cfg, 'notify_planner_admin', 'email', 'push') && process.env.GMAIL_USER) {
-              try { await sendEmail(process.env.GMAIL_USER, '88 Marina — Cleaner added to planner', msg + '\n\nhttps://marinacleaning.netlify.app/admin'); } catch (e) { console.error('Email error:', e.message); }
-            }
           }
         }
 
@@ -142,9 +132,6 @@ exports.handler = async (event) => {
           const msg = `Cleaner finished ${dateStr} clean (${compCl.booking?.guest_name || 'Guest'})`;
           if (shouldSend(compCfg, 'notify_complete_admin', 'push', 'push'))
             await sendPush('admin', '🏠 Clean Completed', msg, 'https://marinacleaning.netlify.app/admin');
-          if (shouldSend(compCfg, 'notify_complete_admin', 'email', 'push') && process.env.GMAIL_USER) {
-            try { await sendEmail(process.env.GMAIL_USER, '88 Marina — Clean completed', msg + '\n\nhttps://marinacleaning.netlify.app/admin'); } catch (e) { console.error('Email error:', e.message); }
-          }
         }
 
         return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
@@ -212,14 +199,11 @@ exports.handler = async (event) => {
           detail: `Invoice ${body.invoice_number} submitted`
         });
 
-        // Send email notification to owner
+        // Send push notification to admin
         try {
-          const adminEmail = process.env.GMAIL_USER;
-          if (adminEmail) {
-            await sendEmail(adminEmail, '88 Marina — Invoice submitted', `Invoice ${body.invoice_number} has been submitted.\n\nhttps://marinacleaning.netlify.app/admin`);
-          }
+          await sendPush('admin', 'Invoice Submitted', `Invoice ${body.invoice_number} has been submitted.`, 'https://marinacleaning.netlify.app/admin');
         } catch (e) {
-          console.error('Email notification failed:', e);
+          console.error('Invoice notification failed:', e);
         }
 
         return { statusCode: 200, headers, body: JSON.stringify({ success: true, invoice }) };

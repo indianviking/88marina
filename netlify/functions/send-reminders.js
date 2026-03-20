@@ -1,12 +1,11 @@
 const { createClient } = require('@supabase/supabase-js');
 const https = require('https');
-const nodemailer = require('nodemailer');
 
-// --- Inline notification helpers ---
+// --- Inline push notification helper ---
 async function sendPush(role, heading, message, url) {
   const APP_ID = process.env.ONESIGNAL_APP_ID;
   const API_KEY = process.env.ONESIGNAL_API_KEY;
-  if (!APP_ID || !API_KEY) { console.log('OneSignal not configured'); return; }
+  if (!APP_ID || !API_KEY) return;
   const payload = JSON.stringify({
     app_id: APP_ID, headings: { en: heading }, contents: { en: message },
     filters: [{ field: 'tag', key: 'role', relation: '=', value: role }],
@@ -16,7 +15,7 @@ async function sendPush(role, heading, message, url) {
     const req = https.request({
       hostname: 'api.onesignal.com', path: '/notifications', method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Key ${API_KEY}`, 'Content-Length': Buffer.byteLength(payload) }
-    }, res => { let b = ''; res.on('data', c => b += c); res.on('end', () => { resolve(); }); });
+    }, res => { let b = ''; res.on('data', c => b += c); res.on('end', () => resolve()); });
     req.on('error', () => resolve());
     req.write(payload); req.end();
   });
@@ -27,12 +26,6 @@ function shouldSend(cfg, key, method, defaultVal) {
   if (pref === 'off') return false;
   if (pref === 'both') return true;
   return pref === method;
-}
-
-async function sendEmail(to, subject, text) {
-  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) return;
-  const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD } });
-  await transporter.sendMail({ from: `"88 Marina" <${process.env.GMAIL_USER}>`, to, subject, text });
 }
 
 const supabase = createClient(
@@ -71,13 +64,6 @@ exports.handler = async function () {
       if (shouldSend(cfg, 'notify_reminder_cleaner', 'push', 'both'))
         await sendPush('cleaner', '🔔 Clean Tomorrow', msg, 'https://marinacleaning.netlify.app/');
 
-      // Email (based on prefs)
-      if (shouldSend(cfg, 'notify_reminder_cleaner', 'email', 'both') && cfg.cleaner_email) {
-        try {
-          await sendEmail(cfg.cleaner_email, '88 Marina — Clean tomorrow',
-            `Hi ${cfg.cleaner_name || 'Cleaner'},\n\nReminder: you have a clean due tomorrow (${dateStr}) for ${guest} at ${cfg.property_name || '88 Marina'}.\n\nCheck the schedule: https://marinacleaning.netlify.app/\n\nThanks`);
-        } catch (e) { console.error('Reminder email error:', e.message); }
-      }
     }
 
     return {
