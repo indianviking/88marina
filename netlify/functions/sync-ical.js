@@ -2,36 +2,6 @@ const { createClient } = require('@supabase/supabase-js');
 const https = require('https');
 const http = require('http');
 
-// --- Inline notification helpers ---
-async function sendPush(role, heading, message, url) {
-  const APP_ID = process.env.ONESIGNAL_APP_ID;
-  const API_KEY = process.env.ONESIGNAL_API_KEY;
-  if (!APP_ID || !API_KEY) { console.log('OneSignal not configured'); return; }
-  const payload = JSON.stringify({
-    app_id: APP_ID,
-    headings: { en: heading },
-    contents: { en: message },
-    filters: [{ field: 'tag', key: 'role', relation: '=', value: role }],
-    ...(url ? { url } : {})
-  });
-  return new Promise(resolve => {
-    const req = https.request({
-      hostname: 'api.onesignal.com', path: '/notifications', method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Key ${API_KEY}`, 'Content-Length': Buffer.byteLength(payload) }
-    }, res => { let b = ''; res.on('data', c => b += c); res.on('end', () => { try { const r = JSON.parse(b); if (r.errors) console.error('OneSignal error:', r.errors); else console.log(`Push sent to ${role}: ${heading} (${r.recipients || 0})`); } catch(e) { console.error('OneSignal parse err:', b); } resolve(); }); });
-    req.on('error', e => { console.error('Push error:', e.message); resolve(); });
-    req.write(payload); req.end();
-  });
-}
-
-function shouldSend(cfg, key, method, defaultVal) {
-  const pref = cfg[key] || defaultVal;
-  if (pref === 'off') return false;
-  if (pref === 'both') return true;
-  return pref === method;
-}
-
-
 // Fetch UK (England & Wales) bank holidays from GOV.UK API
 async function fetchBankHolidays() {
   try {
@@ -53,16 +23,9 @@ const supabase = createClient(
 exports.handler = async (event) => {
   try {
     // 1. Get settings
-    const { data: settings, error: settingsErr } = await supabase
+    const { data: settings } = await supabase
       .from('settings')
       .select('key, value');
-    if (settingsErr) {
-      console.error('Settings error:', settingsErr);
-      return { statusCode: 500, body: JSON.stringify({ error: 'Settings fetch failed', detail: settingsErr.message }) };
-    }
-    if (!settings || settings.length === 0) {
-      return { statusCode: 500, body: JSON.stringify({ error: 'No settings found — check SUPABASE_URL and SUPABASE_SERVICE_KEY env vars' }) };
-    }
     const cfg = Object.fromEntries(settings.map(s => [s.key, s.value]));
 
     if (!cfg.ical_url) {
@@ -235,22 +198,26 @@ exports.handler = async (event) => {
       notes: `Added: ${added}, Cancelled: ${cancelled}${adjusted > 0 ? `, Adjusted: ${adjusted}` : ''}`
     });
 
-    // 7. Send notifications based on preferences
-    // Send push notifications for changes
-    for (const b of addedBookings) {
-      const cleanDate = formatDateNice(b.checkout);
-      const msg = `Clean scheduled for ${cleanDate} (${b.guest_name})`;
-      if (shouldSend(cfg, 'notify_new_clean_cleaner', 'push', 'push'))
-        await sendPush('cleaner', 'New Clean Added', msg, 'https://marinacleaning.netlify.app/');
-      if (shouldSend(cfg, 'notify_new_clean_admin', 'push', 'push'))
-        await sendPush('admin', 'New Booking Synced', `${b.guest_name}: ${formatDateNice(b.checkin)} - ${formatDateNice(b.checkout)}`, 'https://marinacleaning.netlify.app/admin');
-    }
-    for (const b of cancelledBookings) {
-      const msg = `Booking cancelled: ${b.guest_name} (${formatDateNice(b.checkin)} - ${formatDateNice(b.checkout)})`;
-      if (shouldSend(cfg, 'notify_cancelled_cleaner', 'push', 'push'))
-        await sendPush('cleaner', 'Clean Cancelled', msg, 'https://marinacleaning.netlify.app/');
-      if (shouldSend(cfg, 'notify_cancelled_admin', 'push', 'push'))
-        await sendPush('admin', 'Booking Cancelled', msg, 'https://marinacleaning.netlify.app/admin');
+    // 7. Send push notifications for changes
+    if (added > 0 || cancelled > 0) {
+      try {
+        const APP_ID = process.env.ONESIGNAL_APP_ID;
+        const API_KEY = process.env.ONESIGNAL_API_KEY;
+        if (APP_ID && API_KEY) {
+          for (const b of addedBookings) {
+            const msg = `New clean: ${b.guest_name} (${b.checkin} to ${b.checkout})`;
+            await onesignalPush(APP_ID, API_KEY, 'cleaner', 'New Clean Added', msg);
+            await onesignalPush(APP_ID, API_KEY, 'admin', 'New Booking Synced', msg);
+          }
+          for (const b of cancelledBookings) {
+            const msg = `Cancelled: ${b.guest_name} (${b.checkin} to ${b.checkout})`;
+            await onesignalPush(APP_ID, API_KEY, 'cleaner', 'Clean Cancelled', msg);
+            await onesignalPush(APP_ID, API_KEY, 'admin', 'Booking Cancelled', msg);
+          }
+        }
+      } catch (pushErr) {
+        console.error('Push notification error:', pushErr);
+      }
     }
 
     return {
@@ -259,7 +226,7 @@ exports.handler = async (event) => {
     };
   } catch (err) {
     console.error('Sync error:', err);
-    return { statusCode: 500, body: JSON.stringify({ error: err.message, stack: err.stack }) };
+    return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
 
@@ -310,11 +277,6 @@ function toDateStr(date) {
   return date.toISOString().split('T')[0];
 }
 
-function formatDateNice(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-}
-
 function calculateCleaningDate(checkoutDate, allBookings, bankHolidays) {
   const bhSet = new Set(bankHolidays);
 
@@ -355,3 +317,20 @@ function calculateCleaningDate(checkoutDate, allBookings, bankHolidays) {
   return { date: nextDay, rateType: 'standard', conflict: hasSameDayCheckin(nextDay) };
 }
 
+function onesignalPush(appId, apiKey, role, heading, message) {
+  const payload = JSON.stringify({
+    app_id: appId,
+    headings: { en: heading },
+    contents: { en: message },
+    filters: [{ field: 'tag', key: 'role', relation: '=', value: role }],
+    url: role === 'admin' ? 'https://marinacleaning.netlify.app/admin' : 'https://marinacleaning.netlify.app/'
+  });
+  return new Promise(resolve => {
+    const req = https.request({
+      hostname: 'api.onesignal.com', path: '/notifications', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Key ${apiKey}`, 'Content-Length': Buffer.byteLength(payload) }
+    }, res => { let b = ''; res.on('data', c => b += c); res.on('end', () => { console.log('Push result:', b); resolve(); }); });
+    req.on('error', e => { console.error('Push error:', e.message); resolve(); });
+    req.write(payload); req.end();
+  });
+}
