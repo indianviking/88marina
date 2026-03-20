@@ -1,6 +1,8 @@
 // OneSignal push notification helper
 // Used by sync-ical, cleaner-api, and send-reminders
 
+const https = require('https');
+
 const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID;
 const ONESIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY;
 
@@ -28,24 +30,41 @@ async function sendPush(role, heading, message, url) {
     payload.url = url;
   }
 
-  try {
-    const res = await fetch('https://api.onesignal.com/notifications', {
+  return new Promise((resolve) => {
+    const data = JSON.stringify(payload);
+    const req = https.request({
+      hostname: 'api.onesignal.com',
+      path: '/notifications',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Key ${ONESIGNAL_API_KEY}`,
-      },
-      body: JSON.stringify(payload),
+        'Content-Length': Buffer.byteLength(data)
+      }
+    }, res => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(body);
+          if (result.errors) {
+            console.error('OneSignal error:', result.errors);
+          } else {
+            console.log(`Push sent to ${role}: "${heading}" — recipients: ${result.recipients || 0}`);
+          }
+        } catch (e) {
+          console.error('OneSignal parse error:', body);
+        }
+        resolve();
+      });
     });
-    const data = await res.json();
-    if (data.errors) {
-      console.error('OneSignal error:', data.errors);
-    } else {
-      console.log(`Push sent to ${role}: "${heading}" — recipients: ${data.recipients || 0}`);
-    }
-  } catch (err) {
-    console.error('Failed to send push:', err.message);
-  }
+    req.on('error', err => {
+      console.error('Failed to send push:', err.message);
+      resolve(); // don't reject, notifications are non-critical
+    });
+    req.write(data);
+    req.end();
+  });
 }
 
 /**

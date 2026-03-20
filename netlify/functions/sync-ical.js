@@ -202,16 +202,7 @@ exports.handler = async (event) => {
       notes: `Added: ${added}, Cancelled: ${cancelled}${adjusted > 0 ? `, Adjusted: ${adjusted}` : ''}`
     });
 
-    // 7. Send email notifications if changes
-    if (added > 0 || cancelled > 0) {
-      try {
-        await sendNotificationEmail(cfg, addedBookings, cancelledBookings);
-      } catch (emailErr) {
-        console.error('Email send error:', emailErr);
-      }
-    }
-
-    // 8. Send notifications based on preferences
+    // 7. Send notifications based on preferences
     const cleanerEmail = cfg.cleaner_email;
     const adminEmail = process.env.GMAIL_USER; // admin gets emails to their own gmail
     for (const b of addedBookings) {
@@ -344,26 +335,3 @@ function calculateCleaningDate(checkoutDate, allBookings, bankHolidays) {
   return { date: nextDay, rateType: 'standard', conflict: hasSameDayCheckin(nextDay) };
 }
 
-async function sendNotificationEmail(cfg, added, cancelled) {
-  const lines = [];
-  if (added.length > 0) {
-    lines.push(`New cleans added:\n${added.map(b => `- ${b.checkin} → ${b.checkout}`).join('\n')}`);
-  }
-  if (cancelled.length > 0) {
-    lines.push(`Bookings cancelled:\n${cancelled.map(b => `- ${b.checkin} → ${b.checkout}`).join('\n')}`);
-  }
-
-  await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      from: 'noreply@yourdomain.com',
-      to: cfg.cleaner_email,
-      subject: '88 Marina — Cleaning schedule update',
-      text: lines.join('\n\n')
-    })
-  });
-}

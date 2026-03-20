@@ -181,22 +181,10 @@ exports.handler = async (event) => {
 
         // Send email notification to owner
         try {
-          const { data: settingsData } = await supabase.from('settings').select('key, value');
-          const cfg = Object.fromEntries((settingsData || []).map(s => [s.key, s.value]));
-
-          await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              from: 'noreply@yourdomain.com',
-              to: cfg.cleaner_email || 'owner@example.com',
-              subject: '88 Marina — Invoice submitted',
-              text: `Invoice ${body.invoice_number} has been submitted.`
-            })
-          });
+          const adminEmail = process.env.GMAIL_USER;
+          if (adminEmail) {
+            await sendEmail(adminEmail, '88 Marina — Invoice submitted', `Invoice ${body.invoice_number} has been submitted.\n\nhttps://marinacleaning.netlify.app/admin`);
+          }
         } catch (e) {
           console.error('Email notification failed:', e);
         }

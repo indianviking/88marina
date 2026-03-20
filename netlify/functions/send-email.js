@@ -83,4 +83,4 @@ exports.handler = async (event) => {
 };
 
 // Export sendEmail for use by other functions
-module.exports.sendEmail = sendEmail;
+exports.sendEmail = sendEmail;
