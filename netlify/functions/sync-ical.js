@@ -93,7 +93,7 @@ exports.handler = async (event) => {
         const co = new Date(existing_b.checkout + 'T00:00:00');
         const n = Math.round((co - ci) / (1000 * 60 * 60 * 24));
         if (n >= 2) {
-          await supabase.from('bookings').update({ status: 'block', nights: n }).eq('id', existing_b.id);
+          await supabase.from('bookings').update({ status: 'block' }).eq('id', existing_b.id);
         } else {
           await supabase.from('bookings').delete().eq('id', existing_b.id);
         }
@@ -119,8 +119,7 @@ exports.handler = async (event) => {
             guest_name: event.summary || 'Not available',
             checkin: event.checkin,
             checkout: event.checkout,
-            status: 'block',
-            nights: nights
+            status: 'block'
           });
         }
         continue; // Don't create a clean for blocks
@@ -134,7 +133,6 @@ exports.handler = async (event) => {
             guest_name: event.summary,
             checkin: event.checkin,
             checkout: event.checkout,
-            nights: nights,
             status: 'confirmed'
           })
           .select()
