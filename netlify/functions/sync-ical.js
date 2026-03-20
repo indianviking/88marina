@@ -1,8 +1,43 @@
 const { createClient } = require('@supabase/supabase-js');
 const https = require('https');
 const http = require('http');
-const { sendPush, shouldSend } = require('./notify');
-const { sendEmail } = require('./send-email');
+const nodemailer = require('nodemailer');
+
+// --- Inline notification helpers ---
+async function sendPush(role, heading, message, url) {
+  const APP_ID = process.env.ONESIGNAL_APP_ID;
+  const API_KEY = process.env.ONESIGNAL_API_KEY;
+  if (!APP_ID || !API_KEY) { console.log('OneSignal not configured'); return; }
+  const payload = JSON.stringify({
+    app_id: APP_ID,
+    headings: { en: heading },
+    contents: { en: message },
+    filters: [{ field: 'tag', key: 'role', relation: '=', value: role }],
+    ...(url ? { url } : {})
+  });
+  return new Promise(resolve => {
+    const req = https.request({
+      hostname: 'api.onesignal.com', path: '/notifications', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Key ${API_KEY}`, 'Content-Length': Buffer.byteLength(payload) }
+    }, res => { let b = ''; res.on('data', c => b += c); res.on('end', () => { try { const r = JSON.parse(b); if (r.errors) console.error('OneSignal error:', r.errors); else console.log(`Push sent to ${role}: ${heading} (${r.recipients || 0})`); } catch(e) { console.error('OneSignal parse err:', b); } resolve(); }); });
+    req.on('error', e => { console.error('Push error:', e.message); resolve(); });
+    req.write(payload); req.end();
+  });
+}
+
+function shouldSend(cfg, key, method, defaultVal) {
+  const pref = cfg[key] || defaultVal;
+  if (pref === 'off') return false;
+  if (pref === 'both') return true;
+  return pref === method;
+}
+
+async function sendEmail(to, subject, text) {
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) { console.log('Gmail not configured'); return; }
+  const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD } });
+  await transporter.sendMail({ from: `"88 Marina" <${process.env.GMAIL_USER}>`, to, subject, text });
+  console.log(`Email sent to ${to}: ${subject}`);
+}
 
 // Fetch UK (England & Wales) bank holidays from GOV.UK API
 async function fetchBankHolidays() {
