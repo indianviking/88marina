@@ -175,18 +175,28 @@ exports.handler = async (event) => {
       .eq('status', 'confirmed');
 
     let adjusted = 0;
+    const adjustedCleans = [];
     for (const c of (futurePending || [])) {
       if (!c.booking || c.booking.status !== 'confirmed') continue;
       const checkoutDate = new Date(c.booking.checkout + 'T00:00:00');
       const newResult = calculateCleaningDate(checkoutDate, freshBookings || [], bankHolidays);
       const newDateStr = toDateStr(newResult.date);
       if (newDateStr !== c.cleaning_date || newResult.rateType !== c.rate_type) {
+        const oldDate = c.cleaning_date;
         const rateAmount = parseInt(cfg[`rate_${newResult.rateType}`] || cfg.rate_standard);
         await supabase.from('cleanings').update({
           cleaning_date: newDateStr,
           rate_type: newResult.rateType,
-          rate_amount: rateAmount
+          rate_amount: rateAmount,
+          is_new: true
         }).eq('id', c.id);
+        adjustedCleans.push({
+          guest: c.booking.guest_name || 'Guest',
+          oldDate,
+          newDate: newDateStr,
+          checkin: c.booking.checkin,
+          checkout: c.booking.checkout
+        });
         adjusted++;
       }
     }
@@ -199,7 +209,7 @@ exports.handler = async (event) => {
     });
 
     // 7. Send push notifications for changes
-    if (added > 0 || cancelled > 0) {
+    if (added > 0 || cancelled > 0 || adjusted > 0) {
       try {
         const APP_ID = process.env.ONESIGNAL_APP_ID;
         const API_KEY = process.env.ONESIGNAL_API_KEY;
@@ -213,6 +223,11 @@ exports.handler = async (event) => {
             const msg = `Cancelled: ${b.guest_name} (${b.checkin} to ${b.checkout})`;
             await onesignalPush(APP_ID, API_KEY, 'cleaner', 'Clean Cancelled', msg);
             await onesignalPush(APP_ID, API_KEY, 'admin', 'Booking Cancelled', msg);
+          }
+          for (const a of adjustedCleans) {
+            const msg = `Clean date moved from ${a.oldDate} to ${a.newDate} (${a.guest})`;
+            await onesignalPush(APP_ID, API_KEY, 'cleaner', 'Clean Date Changed', msg);
+            await onesignalPush(APP_ID, API_KEY, 'admin', 'Clean Date Adjusted', msg);
           }
         }
       } catch (pushErr) {
