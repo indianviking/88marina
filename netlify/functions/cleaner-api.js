@@ -66,6 +66,14 @@ exports.handler = async (event) => {
       }
 
       // Toggle planner status
+      case 'clear_date_changed': {
+        await supabase
+          .from('cleanings')
+          .update({ date_changed_from: null })
+          .eq('id', body.cleaning_id);
+        return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
+      }
+
       case 'toggle_planner': {
         const added = body.added !== undefined ? body.added : true;
         await supabase

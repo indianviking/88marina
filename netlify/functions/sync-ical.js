@@ -188,7 +188,9 @@ exports.handler = async (event) => {
           cleaning_date: newDateStr,
           rate_type: newResult.rateType,
           rate_amount: rateAmount,
-          is_new: true
+          is_new: true,
+          added_to_planner: false,
+          date_changed_from: oldDate
         }).eq('id', c.id);
         adjustedCleans.push({
           guest: c.booking.guest_name || 'Guest',

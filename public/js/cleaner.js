@@ -198,7 +198,9 @@ function createCleanCard(clean) {
 
   // Top row: date + badges
   let badgesHtml = '';
-  if (!clean.added_to_planner && !isCancelled) {
+  if (clean.date_changed_from && !isCancelled) {
+    badgesHtml += '<span class="badge" style="background-color:#FEF3C7 !important; color:#B45309 !important;">Date changed</span>';
+  } else if (!clean.added_to_planner && !isCancelled) {
     badgesHtml += '<span class="badge badge-new">New</span>';
   }
   if (isCancelled) {
@@ -243,6 +245,7 @@ function createCleanCard(clean) {
       <div class="card-date">${formatDate(clean.cleaning_date)}</div>
       <div class="card-badges">${badgesHtml}</div>
     </div>
+    ${clean.date_changed_from ? `<div style="font-size:12px !important; color:#B45309 !important; padding:4px 16px 0 16px !important; font-weight:500 !important;">Moved from ${formatDate(clean.date_changed_from)}</div>` : ''}
     <div class="card-details">
       <span>${checkinFormatted}</span> &rarr; <span>${checkoutFormatted}</span>
       &nbsp;&middot;&nbsp; ${booking.nights} night${booking.nights !== 1 ? 's' : ''}
@@ -307,11 +310,20 @@ async function togglePlanner(cleaningId, btn, currentState) {
       btn.innerHTML = 'Added to planner &#10003;';
       btn.classList.add('added');
       btn.onclick = () => togglePlanner(cleaningId, btn, true);
-      // Remove "New" badge when added to planner
+      // Remove "New" and "Date changed" badges when added to planner
       if (card) {
         const newBadge = card.querySelector('.badge-new');
         if (newBadge) newBadge.remove();
+        // Remove all date-changed badges
+        card.querySelectorAll('.card-badges .badge').forEach(b => {
+          if (b.textContent.trim() === 'Date changed') b.remove();
+        });
+        // Remove "Moved from" text
+        const movedText = card.querySelector('[style*="color:#B45309"]');
+        if (movedText && movedText.textContent.includes('Moved from')) movedText.remove();
       }
+      // Clear date_changed_from in DB
+      try { await apiCall('clear_date_changed', { cleaning_id: cleaningId }); } catch(e) {}
     } else {
       btn.innerHTML = 'Add to planner';
       btn.classList.remove('added');
