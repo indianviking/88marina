@@ -143,7 +143,10 @@ exports.handler = async (event) => {
 
     // 5. Cancel removed bookings
     for (const existing_b of (existing || [])) {
-      if (!incomingUids.has(existing_b.airbnb_uid) && existing_b.status === 'confirmed' && !existing_b.airbnb_uid.startsWith('manual-')) {
+      // Only cancel FUTURE bookings missing from feed — Airbnb removes past bookings after checkout
+      const bookingCheckout = new Date(existing_b.checkout + 'T00:00:00');
+      const isPast = bookingCheckout <= new Date();
+      if (!incomingUids.has(existing_b.airbnb_uid) && existing_b.status === 'confirmed' && !existing_b.airbnb_uid.startsWith('manual-') && !isPast) {
         await supabase
           .from('bookings')
           .update({ status: 'cancelled', updated_at: new Date().toISOString() })
